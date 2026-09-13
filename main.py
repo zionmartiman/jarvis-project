@@ -70,8 +70,10 @@ def build_orchestrator() -> tuple[
     status_indicator = ArduinoRgbIndicator(
         port=settings.ARDUINO_SERIAL_PORT,
         baudrate=settings.ARDUINO_BAUDRATE,
+        control_socket_path=settings.ARDUINO_CONTROL_SOCKET_PATH,
     )
     status_indicator.connect()
+    status_indicator.start_control_receiver()
 
     orchestrator = ConversationOrchestrator(
         microphone=microphone,

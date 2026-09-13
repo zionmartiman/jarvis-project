@@ -52,7 +52,7 @@ class VentoBridge(AssistantBridge):
             data=payload,
             headers={
                 "Content-Type": "application/json",
-                "Accept": "text/plain, application/json",
+                "Accept": "text/plain, application/json, text/event-stream",
                 "User-Agent": "JarvisVoice/2.0 (Raspberry Pi)",
             },
             method="POST",
@@ -80,38 +80,87 @@ class VentoBridge(AssistantBridge):
                 f"No se pudo contactar con Jarvis: {error.reason}"
             ) from error
 
-    @staticmethod
-    def _extract_reply(body: str, content_type: str) -> str:
-        """El puente puede responder con texto plano o con JSON."""
-
+    @classmethod
+    def _extract_reply(cls, body: str, content_type: str) -> str:
+        """Extrae solo el mensaje final, incluso si llega como SSE."""
         body = body.strip()
-
         if not body:
             raise RuntimeError("Jarvis devolvió una respuesta vacía")
+
+        if "text/event-stream" in content_type.lower() or body.startswith("data:"):
+            return cls._extract_sse_reply(body)
 
         looks_like_json = (
             "json" in content_type.lower() or body.startswith(("{", "["))
         )
-
         if looks_like_json:
             try:
                 payload = json.loads(body)
             except json.JSONDecodeError:
                 return body
-
-            if isinstance(payload, str):
-                return payload.strip()
-
-            if isinstance(payload, dict):
-                reply = (
-                    payload.get("reply")
-                    or payload.get("message")
-                    or payload.get("content")
-                )
-
-                if reply:
-                    return str(reply).strip()
-
-                raise RuntimeError("La respuesta JSON no contenía texto")
+            return cls._extract_json_reply(payload)
 
         return body
+
+    @classmethod
+    def _extract_sse_reply(cls, body: str) -> str:
+        """Lee los eventos SSE y devuelve únicamente el contenido terminal."""
+        failure_message: str | None = None
+
+        for raw_line in body.splitlines():
+            line = raw_line.strip()
+            if not line.startswith("data:"):
+                continue
+            try:
+                event = json.loads(line[5:].strip())
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(event, dict):
+                continue
+
+            event_type = event.get("type")
+            if event_type in {"completed", "complete", "final", "reply"}:
+                try:
+                    return cls._extract_json_reply(event)
+                except RuntimeError:
+                    continue
+            if event_type in {"failed", "error"}:
+                reply = event.get("reply")
+                if isinstance(reply, dict):
+                    failure_message = str(reply.get("content") or "")
+                failure_message = failure_message or (
+                    "El agente de Jarvis no pudo completar la petición."
+                )
+
+        if failure_message:
+            raise RuntimeError(failure_message)
+        raise RuntimeError(
+            "La transmisión de Jarvis terminó sin una respuesta final"
+        )
+
+    @staticmethod
+    def _extract_json_reply(payload: object) -> str:
+        """Obtiene texto de las formas JSON admitidas por el puente."""
+        if isinstance(payload, str):
+            reply = payload
+        elif isinstance(payload, dict):
+            candidate = payload.get("reply")
+            if isinstance(candidate, dict):
+                candidate = (
+                    candidate.get("content")
+                    or candidate.get("message")
+                    or candidate.get("text")
+                )
+            reply = (
+                candidate
+                or payload.get("message")
+                or payload.get("content")
+                or payload.get("text")
+            )
+        else:
+            reply = None
+
+        if isinstance(reply, str) and reply.strip():
+            return reply.strip()
+        raise RuntimeError("La respuesta JSON no contenía texto")
+

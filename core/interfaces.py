@@ -15,7 +15,6 @@ todo core/conversation.py) no cambia ni una línea.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-
 from enum import Enum
 
 
@@ -62,15 +61,25 @@ class SystemController(ABC):
     def reboot(self) -> None:
         raise NotImplementedError
 
+
 class AssistantStatus(Enum):
     WAITING = "waiting"
     LISTENING = "listening"
     PROCESSING = "processing"
     SPEAKING = "speaking"
 
+
 class StatusIndicator(ABC):
     """Representa físicamente el estado del asistente."""
 
     @abstractmethod
     def set_status(self, status: AssistantStatus) -> None:
+        raise NotImplementedError
+
+
+class AlertLight(ABC):
+    """Representa la luz física que señala una alerta hablada en curso."""
+
+    @abstractmethod
+    def set_alert_active(self, is_active: bool) -> None:
         raise NotImplementedError

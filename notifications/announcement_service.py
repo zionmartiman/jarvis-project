@@ -7,7 +7,9 @@ import logging
 import os
 import socket
 
+from Indicators.arduino_alert_client import ArduinoAlertClient
 from config import settings
+from core.interfaces import AlertLight
 from speech.azure_synthesizer import AzureSpeechSynthesizer
 
 LOGGER = logging.getLogger(__name__)
@@ -30,8 +32,13 @@ def _normalise_text(value: object) -> str:
 class AnnouncementService:
     """Consumes local datagrams sequentially and sends them to Azure Speech."""
 
-    def __init__(self, synthesizer: AzureSpeechSynthesizer) -> None:
+    def __init__(
+        self,
+        synthesizer: AzureSpeechSynthesizer,
+        alert_light: AlertLight,
+    ) -> None:
         self._synthesizer = synthesizer
+        self._alert_light = alert_light
         self._socket_path = settings.ANNOUNCEMENT_SOCKET_PATH
 
     def run_forever(self) -> None:
@@ -61,8 +68,13 @@ class AnnouncementService:
             return
 
         try:
-            # The shared playback lock waits for any current Jarvis reply.
-            self._synthesizer.speak(text)
+            # Los callbacks se disparan tras obtener el bloqueo de altavoz:
+            # el LED no parpadea mientras el aviso está aún en cola.
+            self._synthesizer.speak_with_playback_callbacks(
+                text,
+                on_playback_started=lambda: self._alert_light.set_alert_active(True),
+                on_playback_finished=lambda: self._alert_light.set_alert_active(False),
+            )
             LOGGER.info("Announcement spoken.")
         except Exception:
             LOGGER.exception("Unable to speak announcement.")
@@ -76,7 +88,8 @@ def main() -> None:
         voice_name=settings.AZURE_VOICE,
         output_device=settings.OUTPUT_DEVICE,
     )
-    AnnouncementService(synthesizer).run_forever()
+    alert_light = ArduinoAlertClient(settings.ARDUINO_CONTROL_SOCKET_PATH)
+    AnnouncementService(synthesizer, alert_light).run_forever()
 
 
 if __name__ == "__main__":

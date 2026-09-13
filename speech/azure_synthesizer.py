@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
+
 import azure.cognitiveservices.speech as speechsdk
 
 from audio.player import PlaybackLock, RawPcmPlayer
 from config.settings import AzureCredentials
 from core.interfaces import SpeechSynthesizer
+
+LOGGER = logging.getLogger(__name__)
 
 
 class _AzureStreamAdapter(speechsdk.audio.PushAudioOutputStreamCallback):
@@ -44,36 +49,59 @@ class AzureSpeechSynthesizer(SpeechSynthesizer):
         )
 
     def speak(self, text: str) -> None:
+        self.speak_with_playback_callbacks(text)
+
+    def speak_with_playback_callbacks(
+        self,
+        text: str,
+        on_playback_started: Callable[[], None] | None = None,
+        on_playback_finished: Callable[[], None] | None = None,
+    ) -> None:
+        """Reproduce texto y notifica solo durante la reproducción real."""
         text = text.strip()
         if not text:
             return
 
-        # Both the interactive assistant and the announcement service use this
-        # lock. An incoming notice therefore waits rather than mixing voices.
         with PlaybackLock():
-            player = RawPcmPlayer(self._output_device)
-            adapter = _AzureStreamAdapter(player)
-            push_stream = speechsdk.audio.PushAudioOutputStream(adapter)
-            audio_config = speechsdk.audio.AudioOutputConfig(stream=push_stream)
-            synthesizer = speechsdk.SpeechSynthesizer(
-                speech_config=self._speech_config,
-                audio_config=audio_config,
-            )
-            result = None
-
+            self._run_callback(on_playback_started)
             try:
-                result = synthesizer.speak_text_async(text).get()
+                self._speak_while_locked(text)
             finally:
-                player.finish()
+                self._run_callback(on_playback_finished)
 
-            if (
-                result is None
-                or result.reason
-                != speechsdk.ResultReason.SynthesizingAudioCompleted
-            ):
-                details = getattr(result, "cancellation_details", None)
-                error_details = getattr(details, "error_details", "")
-                raise RuntimeError(
-                    "Azure Speech could not synthesize the response. "
-                    f"{error_details}"
-                )
+    def _speak_while_locked(self, text: str) -> None:
+        player = RawPcmPlayer(self._output_device)
+        adapter = _AzureStreamAdapter(player)
+        push_stream = speechsdk.audio.PushAudioOutputStream(adapter)
+        audio_config = speechsdk.audio.AudioOutputConfig(stream=push_stream)
+        synthesizer = speechsdk.SpeechSynthesizer(
+            speech_config=self._speech_config,
+            audio_config=audio_config,
+        )
+        result = None
+
+        try:
+            result = synthesizer.speak_text_async(text).get()
+        finally:
+            player.finish()
+
+        if (
+            result is None
+            or result.reason != speechsdk.ResultReason.SynthesizingAudioCompleted
+        ):
+            details = getattr(result, "cancellation_details", None)
+            error_details = getattr(details, "error_details", "")
+            raise RuntimeError(
+                "Azure Speech could not synthesize the response. "
+                f"{error_details}"
+            )
+
+    @staticmethod
+    def _run_callback(callback: Callable[[], None] | None) -> None:
+        if callback is None:
+            return
+
+        try:
+            callback()
+        except Exception:
+            LOGGER.exception("Playback state callback failed.")
