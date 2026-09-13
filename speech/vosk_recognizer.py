@@ -12,6 +12,7 @@ sustitúyela en main.py.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from vosk import KaldiRecognizer, Model
@@ -22,6 +23,10 @@ from core.interfaces import SpeechRecognizer
 
 class VoskSpeechRecognizer(SpeechRecognizer):
     """Detecta la palabra de activación y transcribe frases con Vosk."""
+
+    # Margen adicional tras el final de frase detectado por Vosk. Si la
+    # persona retoma la frase dentro de este tiempo, Jarvis sigue escuchando.
+    _CONTINUATION_GRACE_SECONDS = 1.0
 
     def __init__(
         self,
@@ -69,25 +74,45 @@ class VoskSpeechRecognizer(SpeechRecognizer):
         """
         Escucha una frase completa.
 
-        Vosk detecta el final cuando encuentra suficiente silencio
-        después de que hayas hablado. No existe un límite fijo.
+        Vosk detecta un posible final tras un silencio. Conservamos un
+        pequeño margen adicional para que una pausa natural al hablar no
+        envíe la instrucción antes de tiempo.
         """
 
         recognizer = KaldiRecognizer(self._model, self._sample_rate)
+        segments: list[str] = []
+        silence_started_at: float | None = None
 
         self._microphone.start_capture()
 
         try:
             while True:
                 audio = self._microphone.read_chunk()
+                now = time.monotonic()
 
                 if recognizer.AcceptWaveform(audio):
                     result = json.loads(recognizer.Result())
                     text = result.get("text", "").strip()
 
-                    # Vosk puede marcar un silencio sin texto como
-                    # final. En ese caso continuamos esperando.
+                    # Vosk puede marcar un silencio sin texto como final.
+                    # Solo iniciamos la espera adicional después de haber
+                    # reconocido al menos un fragmento de la instrucción.
                     if text:
-                        return text
+                        segments.append(text)
+                        silence_started_at = now
+
+                else:
+                    partial = json.loads(recognizer.PartialResult())
+                    if partial.get("partial", "").strip():
+                        # Only nonempty speech resets the silence timer.
+                        silence_started_at = None
+
+                if (
+                    segments
+                    and silence_started_at is not None
+                    and now - silence_started_at
+                    >= self._CONTINUATION_GRACE_SECONDS
+                ):
+                    return " ".join(segments)
         finally:
             self._microphone.stop_capture()
