@@ -24,13 +24,18 @@ El resto del proyecto no se entera del cambio.
 from audio.microphone_stream import MicrophoneStream
 from bridge.vento_bridge import VentoBridge
 from config import settings
+from Indicators.arduino_rgb_indicator import ArduinoRgbIndicator
 from core.conversation import ConversationOrchestrator
 from speech.azure_synthesizer import AzureSpeechSynthesizer
 from speech.vosk_recognizer import VoskSpeechRecognizer
 from system.power_control import RaspberryPowerController
 
 
-def build_orchestrator() -> tuple[ConversationOrchestrator, MicrophoneStream]:
+def build_orchestrator() -> tuple[
+    ConversationOrchestrator,
+    MicrophoneStream,
+    ArduinoRgbIndicator,
+]:
     """Carga la configuración y construye todas las piezas del sistema."""
 
     # Validamos la configuración antes de abrir el micrófono, igual
@@ -62,27 +67,37 @@ def build_orchestrator() -> tuple[ConversationOrchestrator, MicrophoneStream]:
 
     power_controller = RaspberryPowerController()
 
+    status_indicator = ArduinoRgbIndicator(
+        port=settings.ARDUINO_SERIAL_PORT,
+        baudrate=settings.ARDUINO_BAUDRATE,
+    )
+    status_indicator.connect()
+
     orchestrator = ConversationOrchestrator(
         microphone=microphone,
         recognizer=recognizer,
         synthesizer=synthesizer,
         bridge=bridge,
         power_controller=power_controller,
+        status_indicator=status_indicator,
         max_history_items=settings.MAX_HISTORY_ITEMS,
     )
 
-    return orchestrator, microphone
+    return orchestrator, microphone, status_indicator
 
 
 def main() -> None:
-    orchestrator, microphone = build_orchestrator()
+    orchestrator, microphone, status_indicator = build_orchestrator()
 
     print("Jarvis por voz está listo. Di «Jarvis».", flush=True)
 
     # El dispositivo de audio se abre una sola vez y permanece abierto
     # durante toda la ejecución.
-    with microphone:
-        orchestrator.run_forever()
+    try:
+        with microphone:
+            orchestrator.run_forever()
+    finally:
+        status_indicator.close()
 
 
 if __name__ == "__main__":

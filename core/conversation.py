@@ -16,8 +16,10 @@ from audio.microphone_stream import MicrophoneStream
 from core import intents
 from core.interfaces import (
     AssistantBridge,
+    AssistantStatus,
     SpeechRecognizer,
     SpeechSynthesizer,
+    StatusIndicator,
     SystemController,
 )
 
@@ -32,6 +34,7 @@ class ConversationOrchestrator:
         synthesizer: SpeechSynthesizer,
         bridge: AssistantBridge,
         power_controller: SystemController,
+        status_indicator: StatusIndicator,
         max_history_items: int,
     ):
         self._microphone = microphone
@@ -39,6 +42,7 @@ class ConversationOrchestrator:
         self._synthesizer = synthesizer
         self._bridge = bridge
         self._power_controller = power_controller
+        self._status_indicator = status_indicator
         self._max_history_items = max_history_items
 
     def run_forever(self) -> None:
@@ -47,6 +51,7 @@ class ConversationOrchestrator:
         self._speak("Sistemas listos y esperando instrucciones señor.")
 
         while True:
+            self._set_status(AssistantStatus.WAITING)
             print("Esperando la palabra «Jarvis»...", flush=True)
             self._recognizer.wait_for_wake_word()
             print("Activación detectada.", flush=True)
@@ -70,7 +75,7 @@ class ConversationOrchestrator:
 
         while True:
             print("Escuchando el siguiente mensaje...", flush=True)
-            command = self._recognizer.listen_for_sentence()
+            command = self._listen_for_sentence()
             print(f"Usuario: {command}", flush=True)
 
             power_result = self._handle_power_command(command)
@@ -130,7 +135,7 @@ class ConversationOrchestrator:
         self._speak(question)
 
         print("Esperando confirmación...", flush=True)
-        confirmation = self._recognizer.listen_for_sentence()
+        confirmation = self._listen_for_sentence()
         print(f"Confirmación: {confirmation}", flush=True)
 
         if intents.is_confirmation(confirmation):
@@ -143,6 +148,7 @@ class ConversationOrchestrator:
 
     def _handle_turn(self, command: str, history: list[dict]) -> None:
         try:
+            self._set_status(AssistantStatus.PROCESSING)
             print("Consultando a Jarvis...", flush=True)
             reply = self._bridge.ask(command, history)
             print(f"Jarvis: {reply}", flush=True)
@@ -186,7 +192,25 @@ class ConversationOrchestrator:
             # Aunque haya fallado un turno, permanece en conversación.
             self._microphone.clear()
 
+    def _listen_for_sentence(self) -> str:
+        self._set_status(AssistantStatus.LISTENING)
+        return self._recognizer.listen_for_sentence()
+
+    def _set_status(self, status: AssistantStatus) -> None:
+        """Actualiza el indicador físico sin interrumpir la conversación."""
+
+        try:
+            self._status_indicator.set_status(status)
+        except Exception as error:
+            print(
+                f"Error actualizando el LED de estado: {error}",
+                file=sys.stderr,
+                flush=True,
+            )
+
     def _speak(self, text: str) -> None:
+        self._set_status(AssistantStatus.SPEAKING)
+
         # Durante la respuesta no queremos que el micrófono capture la
         # propia voz de Jarvis.
         self._microphone.stop_capture()

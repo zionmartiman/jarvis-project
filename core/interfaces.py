@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from enum import Enum
+
 
 class SpeechRecognizer(ABC):
     """Convierte voz capturada por el micrófono en texto."""
@@ -58,4 +60,17 @@ class SystemController(ABC):
 
     @abstractmethod
     def reboot(self) -> None:
+        raise NotImplementedError
+
+class AssistantStatus(Enum):
+    WAITING = "waiting"
+    LISTENING = "listening"
+    PROCESSING = "processing"
+    SPEAKING = "speaking"
+
+class StatusIndicator(ABC):
+    """Representa físicamente el estado del asistente."""
+
+    @abstractmethod
+    def set_status(self, status: AssistantStatus) -> None:
         raise NotImplementedError

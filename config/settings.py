@@ -40,6 +40,10 @@ AZURE_VOICE = "es-ES-AlvaroNeural"
 # Jarvis) en el historial que se envía al puente.
 MAX_HISTORY_ITEMS = 6
 
+# Arduino Mega conectado por USB para el indicador RGB de estado.
+ARDUINO_SERIAL_PORT = "/dev/ttyACM0"
+ARDUINO_BAUDRATE = 115200
+
 
 @dataclass(frozen=True)
 class AzureCredentials:
