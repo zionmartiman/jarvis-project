@@ -44,6 +44,11 @@ MAX_HISTORY_ITEMS = 6
 ARDUINO_SERIAL_PORT = "/dev/ttyACM0"
 ARDUINO_BAUDRATE = 115200
 
+# Local queue used by the independent spoken-announcement receiver.
+ANNOUNCEMENT_SOCKET_PATH = Path('/run/user') / str(__import__('os').getuid()) / 'jarvis-announcer.sock'
+MAX_ANNOUNCEMENT_CHARACTERS = 500
+MAX_ANNOUNCEMENT_DATAGRAM_BYTES = 2048
+
 
 @dataclass(frozen=True)
 class AzureCredentials:
