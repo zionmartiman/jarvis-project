@@ -1,0 +1,3 @@
+Desde dentro del Proyecto:
+
+scp -r jarvis@raspberrypi.local:/home/jarvis/jarvis-project/* "C:\Repositories\jarvis-project"
