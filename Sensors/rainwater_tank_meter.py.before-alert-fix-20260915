@@ -28,10 +28,8 @@ class RainwaterTankLevel:
 class RainwaterTankMeter:
     """Measures a rainwater tank and exposes its latest fill level."""
 
-    EMPTY_TANK_DISTANCE_CM = 26
-    FULL_TANK_DISTANCE_CM = 7.0
-    ALERT_FILL_LEVEL_CHANGE_PERCENTAGE = 5
-    MINIMUM_ALERT_INTERVAL_SECONDS = 5.0
+    EMPTY_TANK_DISTANCE_CM = 22.0
+    FULL_TANK_DISTANCE_CM = 2.0
 
     _DISTANCE_COMMAND = "SENSOR DISTANCE"
     _DISTANCE_PREFIX = "DISTANCE_CM "
@@ -49,8 +47,7 @@ class RainwaterTankMeter:
         self._poll_interval_seconds = poll_interval_seconds
         self._latest_level: RainwaterTankLevel | None = None
         self._latest_level_lock = threading.Lock()
-        self._last_announced_fill_percentage: int | None = None
-        self._last_announced_at_monotonic: float | None = None
+        self._last_alerted_five_percent_step: int | None = None
         self._polling_thread: threading.Thread | None = None
         self._stop_polling = threading.Event()
 
@@ -145,36 +142,16 @@ class RainwaterTankMeter:
             LOGGER.exception("Unable to publish rainwater tank state.")
 
     def _notify_fill_level_change(self, level: RainwaterTankLevel) -> None:
-        """Announce only a real five-point change, at most once every five seconds."""
-        now_monotonic = time.monotonic()
-
-        if self._last_announced_fill_percentage is None:
-            self._last_announced_fill_percentage = level.fill_percentage
-            self._last_announced_at_monotonic = now_monotonic
+        five_percent_step = level.fill_percentage // 5
+        if self._last_alerted_five_percent_step is None:
+            self._last_alerted_five_percent_step = five_percent_step
             return
-
-        percentage_change = abs(
-            level.fill_percentage - self._last_announced_fill_percentage
-        )
-        if percentage_change < self.ALERT_FILL_LEVEL_CHANGE_PERCENTAGE:
+        if five_percent_step == self._last_alerted_five_percent_step:
             return
-
-        if (
-            self._last_announced_at_monotonic is not None
-            and now_monotonic - self._last_announced_at_monotonic
-            < self.MINIMUM_ALERT_INTERVAL_SECONDS
-        ):
-            return
-
+        self._last_alerted_five_percent_step = five_percent_step
         if self._on_fill_level_changed is None:
             return
-
         try:
             self._on_fill_level_changed(level)
         except Exception:
             LOGGER.exception("Unable to announce rainwater tank level change.")
-            return
-
-        self._last_announced_fill_percentage = level.fill_percentage
-        self._last_announced_at_monotonic = now_monotonic
-
