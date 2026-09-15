@@ -21,10 +21,12 @@ otro servicio), solo hay que:
 El resto del proyecto no se entera del cambio.
 """
 
+from Arduino.arduino_mega_connection import ArduinoMegaConnection
 from audio.microphone_stream import MicrophoneStream
 from bridge.vento_bridge import VentoBridge
 from config import settings
 from Indicators.arduino_rgb_indicator import ArduinoRgbIndicator
+from Sensors.rainwater_tank_meter import RainwaterTankMeter
 from core.conversation import ConversationOrchestrator
 from speech.azure_synthesizer import AzureSpeechSynthesizer
 from speech.vosk_recognizer import VoskSpeechRecognizer
@@ -35,11 +37,10 @@ def build_orchestrator() -> tuple[
     ConversationOrchestrator,
     MicrophoneStream,
     ArduinoRgbIndicator,
+    RainwaterTankMeter,
 ]:
     """Carga la configuración y construye todas las piezas del sistema."""
 
-    # Validamos la configuración antes de abrir el micrófono, igual
-    # que en el fichero original.
     bridge_credentials = settings.load_bridge_credentials()
     azure_credentials = settings.load_azure_credentials()
 
@@ -66,15 +67,20 @@ def build_orchestrator() -> tuple[
     )
 
     power_controller = RaspberryPowerController()
-
-    status_indicator = ArduinoRgbIndicator(
+    arduino = ArduinoMegaConnection(
         port=settings.ARDUINO_SERIAL_PORT,
         baudrate=settings.ARDUINO_BAUDRATE,
+    )
+    arduino.connect()
+
+    status_indicator = ArduinoRgbIndicator(
+        arduino=arduino,
         control_socket_path=settings.ARDUINO_CONTROL_SOCKET_PATH,
     )
-    status_indicator.connect()
+    rainwater_tank_meter = RainwaterTankMeter(arduino=arduino)
+
     status_indicator.start_control_receiver()
-    status_indicator.start_distance_logger()
+    rainwater_tank_meter.start_polling()
 
     orchestrator = ConversationOrchestrator(
         microphone=microphone,
@@ -86,20 +92,21 @@ def build_orchestrator() -> tuple[
         max_history_items=settings.MAX_HISTORY_ITEMS,
     )
 
-    return orchestrator, microphone, status_indicator
+    return orchestrator, microphone, status_indicator, rainwater_tank_meter
 
 
 def main() -> None:
-    orchestrator, microphone, status_indicator = build_orchestrator()
+    orchestrator, microphone, status_indicator, rainwater_tank_meter = (
+        build_orchestrator()
+    )
 
     print("Jarvis por voz está listo. Di «Jarvis».", flush=True)
 
-    # El dispositivo de audio se abre una sola vez y permanece abierto
-    # durante toda la ejecución.
     try:
         with microphone:
             orchestrator.run_forever()
     finally:
+        rainwater_tank_meter.close()
         status_indicator.close()
 
 
