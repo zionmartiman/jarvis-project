@@ -37,6 +37,9 @@ ANNOUNCEMENT_SOCKET_PATH = (
 MAX_ANNOUNCEMENT_CHARACTERS = 500
 MAX_ANNOUNCEMENT_DATAGRAM_BYTES = 2048
 
+# Queryable rainwater tank state, updated by RainwaterTankMeter.
+RAINWATER_TANK_STATE_PATH = BASE_DIR / "state" / "rainwater_tank_state.json"
+
 
 @dataclass(frozen=True)
 class AzureCredentials:
