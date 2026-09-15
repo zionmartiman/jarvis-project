@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""
+Punto de entrada de Jarvis Voice.
+
+Este es el ÚNICO fichero que debe ejecutarse directamente (por
+systemd, cron, un acceso directo, etc.) y por tanto el que necesita
+permisos especiales en la Raspberry para poder apagar/reiniciar el
+sistema. Ver README.md, sección "Permisos de sudo".
+
+Aquí se construyen todas las implementaciones concretas (Vosk, Azure,
+Vento, control de energía) y se inyectan en ConversationOrchestrator,
+que solo conoce las interfaces de core/interfaces.py. Es el
+equivalente en Python a lo que harías en Program.cs / Startup.cs en
+.NET: la "composition root" es el único sitio que conoce todas las
+clases concretas a la vez.
+
+Para cambiar de proveedor (por ejemplo, sustituir Azure Speech por
+otro servicio), solo hay que:
+  1. Crear una nueva clase en speech/ que implemente SpeechSynthesizer.
+  2. Cambiar la línea que crea `synthesizer` aquí abajo.
+El resto del proyecto no se entera del cambio.
+"""
+
+from audio.microphone_stream import MicrophoneStream
+from bridge.vento_bridge import VentoBridge
+from config import settings
+from Indicators.arduino_rgb_indicator import ArduinoRgbIndicator
+from core.conversation import ConversationOrchestrator
+from speech.azure_synthesizer import AzureSpeechSynthesizer
+from speech.vosk_recognizer import VoskSpeechRecognizer
+from system.power_control import RaspberryPowerController
+
+
+def build_orchestrator() -> tuple[
+    ConversationOrchestrator,
+    MicrophoneStream,
+    ArduinoRgbIndicator,
+]:
+    """Carga la configuración y construye todas las piezas del sistema."""
+
+    # Validamos la configuración antes de abrir el micrófono, igual
+    # que en el fichero original.
+    bridge_credentials = settings.load_bridge_credentials()
+    azure_credentials = settings.load_azure_credentials()
+
+    microphone = MicrophoneStream(
+        sample_rate=settings.SAMPLE_RATE,
+        device=settings.INPUT_DEVICE,
+    )
+
+    recognizer = VoskSpeechRecognizer(
+        microphone=microphone,
+        model_path=settings.MODEL_PATH,
+        sample_rate=settings.SAMPLE_RATE,
+    )
+
+    synthesizer = AzureSpeechSynthesizer(
+        credentials=azure_credentials,
+        voice_name=settings.AZURE_VOICE,
+        output_device=settings.OUTPUT_DEVICE,
+    )
+
+    bridge = VentoBridge(
+        credentials=bridge_credentials,
+        history_limit=settings.MAX_HISTORY_ITEMS,
+    )
+
+    power_controller = RaspberryPowerController()
+
+    status_indicator = ArduinoRgbIndicator(
+        port=settings.ARDUINO_SERIAL_PORT,
+        baudrate=settings.ARDUINO_BAUDRATE,
+        control_socket_path=settings.ARDUINO_CONTROL_SOCKET_PATH,
+    )
+    status_indicator.connect()
+    status_indicator.start_control_receiver()
+
+    orchestrator = ConversationOrchestrator(
+        microphone=microphone,
+        recognizer=recognizer,
+        synthesizer=synthesizer,
+        bridge=bridge,
+        power_controller=power_controller,
+        status_indicator=status_indicator,
+        max_history_items=settings.MAX_HISTORY_ITEMS,
+    )
+
+    return orchestrator, microphone, status_indicator
+
+
+def main() -> None:
+    orchestrator, microphone, status_indicator = build_orchestrator()
+
+    print("Jarvis por voz está listo. Di «Jarvis».", flush=True)
+
+    # El dispositivo de audio se abre una sola vez y permanece abierto
+    # durante toda la ejecución.
+    try:
+        with microphone:
+            orchestrator.run_forever()
+    finally:
+        status_indicator.close()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nJarvis detenido.", flush=True)

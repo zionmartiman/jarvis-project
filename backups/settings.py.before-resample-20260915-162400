@@ -10,7 +10,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SAMPLE_RATE = 16000
+SAMPLE_RATE = 48000
 INPUT_DEVICE = 1
 OUTPUT_DEVICE = "plughw:0,0"
 

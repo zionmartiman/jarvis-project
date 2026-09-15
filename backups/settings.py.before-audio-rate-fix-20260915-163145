@@ -1,5 +1,10 @@
 """
 Configuración general de Jarvis Voice.
+
+Aquí viven las rutas, constantes y la carga de los archivos de
+configuración privados (claves de Azure, credenciales del puente de
+Vento). Es el único sitio del proyecto que debería tocarse para
+cambiar un dispositivo de audio, una ruta o un límite de historial.
 """
 
 from __future__ import annotations
@@ -8,10 +13,20 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+# Raíz del proyecto (la carpeta que contiene main.py), calculada de
+# forma relativa a este fichero para que funcione igual si systemd
+# lo ejecuta desde otro directorio de trabajo.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SAMPLE_RATE = 16000
+
+# Dispositivo PortAudio del micrófono Plantronics.
+# Se puede consultar con:
+# python -c "import sounddevice as sd; print(sd.query_devices())"
 INPUT_DEVICE = 1
+
+# Salida ALSA de los auriculares Plantronics.
+# Cuando cambies de altavoz, solo hay que modificar este valor.
 OUTPUT_DEVICE = "plughw:0,0"
 
 MODEL_PATH = BASE_DIR / "models" / "vosk-model-small-es-0.42"
@@ -20,10 +35,11 @@ BRIDGE_CONFIG_PATH = BASE_DIR / "state" / "bridge.env"
 
 AZURE_VOICE = "es-ES-AlvaroNeural"
 
-# Conservamos los últimos tres intercambios completos (usuario + Jarvis).
+# Conservamos los últimos tres intercambios completos (usuario +
+# Jarvis) en el historial que se envía al puente.
 MAX_HISTORY_ITEMS = 6
 
-# Arduino Mega conectado por USB para las luces físicas.
+# Arduino Mega conectado por USB para el indicador RGB de estado.
 ARDUINO_SERIAL_PORT = "/dev/ttyACM0"
 ARDUINO_BAUDRATE = 115200
 ARDUINO_CONTROL_SOCKET_PATH = (

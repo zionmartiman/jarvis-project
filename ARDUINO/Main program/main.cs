@@ -15,7 +15,7 @@ unsigned long breathingCycleStartedAt = 0;
 unsigned long yellowBlinkStartedAt = 0;
 unsigned long alertBlinkStartedAt = 0;
 
-const unsigned long BREATHING_HALF_CYCLE_MS = 1000;
+const unsigned long BREATHING_HALF_CYCLE_MS = 1000; 
 const unsigned long YELLOW_BLINK_INTERVAL_MS = 125;
 const unsigned long ALERT_BLINK_INTERVAL_MS = 125;
 const byte YELLOW_RED_BRIGHTNESS = 255;
