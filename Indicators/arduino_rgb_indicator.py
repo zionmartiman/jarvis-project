@@ -1,4 +1,4 @@
-"""Adaptador serie y receptor local para las luces físicas del Mega."""
+"""Adaptador serie, indicadores físicos y lectura del HC-SR04 del Mega."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ArduinoRgbIndicator(StatusIndicator):
-    """Controla el Mega y recibe órdenes locales para la luz de alerta."""
+    """Controla el Mega y consulta periódicamente su sensor ultrasónico."""
 
     _STATUS_COMMANDS = {
         AssistantStatus.WAITING: "STATE RED",
@@ -26,6 +26,8 @@ class ArduinoRgbIndicator(StatusIndicator):
         AssistantStatus.PROCESSING: "STATE BREATHING",
         AssistantStatus.SPEAKING: "STATE YELLOW",
     }
+    _DISTANCE_COMMAND = "SENSOR DISTANCE"
+    _DISTANCE_PREFIX = "DISTANCE_CM "
 
     def __init__(
         self,
@@ -33,11 +35,13 @@ class ArduinoRgbIndicator(StatusIndicator):
         baudrate: int,
         control_socket_path: Path,
         timeout_seconds: float = 2.0,
+        distance_poll_interval_seconds: float = 0.5,
     ) -> None:
         self._port = port
         self._baudrate = baudrate
         self._control_socket_path = control_socket_path
         self._timeout_seconds = timeout_seconds
+        self._distance_poll_interval_seconds = distance_poll_interval_seconds
         self._serial: serial.Serial | None = None
         self._last_status_command: str | None = None
         self._alert_is_active: bool | None = None
@@ -45,6 +49,8 @@ class ArduinoRgbIndicator(StatusIndicator):
         self._control_socket: socket.socket | None = None
         self._control_thread: threading.Thread | None = None
         self._stop_control_receiver = threading.Event()
+        self._distance_thread: threading.Thread | None = None
+        self._stop_distance_logger = threading.Event()
 
     def connect(self) -> None:
         """Abre el USB-serie una vez; el Mega se reinicia al abrirlo."""
@@ -71,6 +77,19 @@ class ArduinoRgbIndicator(StatusIndicator):
             daemon=True,
         )
         self._control_thread.start()
+
+    def start_distance_logger(self) -> None:
+        """Registra la distancia del HC-SR04 cada medio segundo."""
+        if self._distance_thread is not None:
+            return
+
+        self._stop_distance_logger.clear()
+        self._distance_thread = threading.Thread(
+            target=self._log_distances,
+            name="arduino-tank-distance",
+            daemon=True,
+        )
+        self._distance_thread.start()
 
     def set_status(self, status: AssistantStatus) -> None:
         command = self._STATUS_COMMANDS[status]
@@ -110,6 +129,40 @@ class ArduinoRgbIndicator(StatusIndicator):
                 continue
 
             self.set_alert_light(is_active)
+
+    def _log_distances(self) -> None:
+        while not self._stop_distance_logger.is_set():
+            distance_cm = self._read_distance_cm()
+            if distance_cm is not None:
+                print(f"Distancia HC-SR04: {distance_cm:.1f} cm", flush=True)
+            self._stop_distance_logger.wait(self._distance_poll_interval_seconds)
+
+    def _read_distance_cm(self) -> float | None:
+        try:
+            with self._serial_lock:
+                self._ensure_connected()
+                if self._serial is None:
+                    return None
+
+                self._serial.write(f"{self._DISTANCE_COMMAND}\n".encode("ascii"))
+                self._serial.flush()
+                response = self._serial.readline().decode(
+                    "ascii",
+                    errors="replace",
+                ).strip()
+
+            if not response.startswith(self._DISTANCE_PREFIX):
+                print(f"Respuesta de distancia inesperada del Mega: {response}", flush=True)
+                return None
+
+            distance_cm = float(response.removeprefix(self._DISTANCE_PREFIX))
+            if distance_cm <= 0:
+                raise ValueError("la distancia debe ser positiva")
+            return distance_cm
+        except (ValueError, serial.SerialException, OSError) as error:
+            print(f"Lectura HC-SR04 no disponible: {error}", flush=True)
+            self._close_serial()
+            return None
 
     def _send_command(self, command: str) -> bool:
         try:
@@ -152,7 +205,7 @@ class ArduinoRgbIndicator(StatusIndicator):
             self._last_status_command = None
             self._alert_is_active = None
         except (serial.SerialException, OSError) as error:
-            LOGGER.warning("Arduino no disponible: %s", error)
+            print(f"Arduino no disponible: {error}", flush=True)
             self._close_serial()
 
     def _close_serial(self) -> None:
@@ -163,8 +216,12 @@ class ArduinoRgbIndicator(StatusIndicator):
         self._alert_is_active = None
 
     def close(self) -> None:
-        self._stop_control_receiver.set()
+        self._stop_distance_logger.set()
+        if self._distance_thread is not None:
+            self._distance_thread.join(timeout=1)
+            self._distance_thread = None
 
+        self._stop_control_receiver.set()
         if self._control_socket is not None:
             self._control_socket.close()
             self._control_socket = None

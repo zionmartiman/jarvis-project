@@ -74,6 +74,7 @@ def build_orchestrator() -> tuple[
     )
     status_indicator.connect()
     status_indicator.start_control_receiver()
+    status_indicator.start_distance_logger()
 
     orchestrator = ConversationOrchestrator(
         microphone=microphone,
