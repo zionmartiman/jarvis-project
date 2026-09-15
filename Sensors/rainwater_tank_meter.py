@@ -28,8 +28,8 @@ class RainwaterTankLevel:
 class RainwaterTankMeter:
     """Measures a rainwater tank and exposes its latest fill level."""
 
-    EMPTY_TANK_DISTANCE_CM = 26
-    FULL_TANK_DISTANCE_CM = 7.0
+    EMPTY_TANK_DISTANCE_CM = 27
+    FULL_TANK_DISTANCE_CM = 7.0 
     ALERT_FILL_LEVEL_CHANGE_PERCENTAGE = 5
     MINIMUM_ALERT_INTERVAL_SECONDS = 5.0
 
