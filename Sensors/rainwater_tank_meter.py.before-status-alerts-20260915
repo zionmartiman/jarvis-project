@@ -26,10 +26,10 @@ class RainwaterTankLevel:
 
 
 class RainwaterTankMeter:
-    """Measures a rainwater tank and publishes its current fill level."""
+    """Measures a rainwater tank and exposes its latest fill level."""
 
     EMPTY_TANK_DISTANCE_CM = 27
-    FULL_TANK_DISTANCE_CM = 7.0
+    FULL_TANK_DISTANCE_CM = 7.0 
     ALERT_FILL_LEVEL_CHANGE_PERCENTAGE = 5
     MINIMUM_ALERT_INTERVAL_SECONDS = 5.0
 
@@ -41,23 +41,16 @@ class RainwaterTankMeter:
         arduino: ArduinoMegaConnection,
         state_path: Path,
         on_fill_level_changed: Callable[[RainwaterTankLevel], None] | None = None,
-        on_fill_level_status_changed: (
-            Callable[[RainwaterTankLevel, str], None] | None
-        ) = None,
         poll_interval_seconds: float = 0.5,
     ) -> None:
         self._arduino = arduino
         self._state_path = state_path
         self._on_fill_level_changed = on_fill_level_changed
-        self._on_fill_level_status_changed = on_fill_level_status_changed
         self._poll_interval_seconds = poll_interval_seconds
         self._latest_level: RainwaterTankLevel | None = None
         self._latest_level_lock = threading.Lock()
         self._last_announced_fill_percentage: int | None = None
-        self._last_fill_level_change_at_monotonic: float | None = None
-        self._previous_fill_percentage: int | None = None
-        self._announced_statuses: set[str] = set()
-        self._has_observed_first_level = False
+        self._last_announced_at_monotonic: float | None = None
         self._polling_thread: threading.Thread | None = None
         self._stop_polling = threading.Event()
 
@@ -137,7 +130,7 @@ class RainwaterTankMeter:
             f"{level.distance_cm:.1f} cm | fill level: {level.fill_percentage}%",
             flush=True,
         )
-        self._notify(level)
+        self._notify_fill_level_change(level)
 
     def _write_state_file(self, level: RainwaterTankLevel) -> None:
         try:
@@ -151,42 +144,24 @@ class RainwaterTankMeter:
         except OSError:
             LOGGER.exception("Unable to publish rainwater tank state.")
 
-    def _notify(self, level: RainwaterTankLevel) -> None:
-        """Notify percentage changes and only directional status threshold crossings."""
-        previous_percentage = self._previous_fill_percentage
-
-        if not self._has_observed_first_level:
-            self._has_observed_first_level = True
-            self._last_announced_fill_percentage = level.fill_percentage
-            self._previous_fill_percentage = level.fill_percentage
-            return
-
-        if previous_percentage is None:
-            self._previous_fill_percentage = level.fill_percentage
-            return
-
-        self._notify_fill_level_change(level)
-        self._notify_status_transition(
-            previous_percentage, level
-        )
-        self._previous_fill_percentage = level.fill_percentage
-
     def _notify_fill_level_change(self, level: RainwaterTankLevel) -> None:
-        last_percentage = self._last_announced_fill_percentage
-        if last_percentage is None:
-            self._last_announced_fill_percentage = level.fill_percentage
-            return
-
-        if (
-            abs(level.fill_percentage - last_percentage)
-            < self.ALERT_FILL_LEVEL_CHANGE_PERCENTAGE
-        ):
-            return
-
+        """Announce only a real five-point change, at most once every five seconds."""
         now_monotonic = time.monotonic()
+
+        if self._last_announced_fill_percentage is None:
+            self._last_announced_fill_percentage = level.fill_percentage
+            self._last_announced_at_monotonic = now_monotonic
+            return
+
+        percentage_change = abs(
+            level.fill_percentage - self._last_announced_fill_percentage
+        )
+        if percentage_change < self.ALERT_FILL_LEVEL_CHANGE_PERCENTAGE:
+            return
+
         if (
-            self._last_fill_level_change_at_monotonic is not None
-            and now_monotonic - self._last_fill_level_change_at_monotonic
+            self._last_announced_at_monotonic is not None
+            and now_monotonic - self._last_announced_at_monotonic
             < self.MINIMUM_ALERT_INTERVAL_SECONDS
         ):
             return
@@ -201,58 +176,5 @@ class RainwaterTankMeter:
             return
 
         self._last_announced_fill_percentage = level.fill_percentage
-        self._last_fill_level_change_at_monotonic = now_monotonic
+        self._last_announced_at_monotonic = now_monotonic
 
-    def _notify_status_transition(
-        self,
-        previous_percentage: int,
-        level: RainwaterTankLevel,
-    ) -> None:
-        """Notify each directional status once, with hysteresis against sensor noise."""
-        current_percentage = level.fill_percentage
-        self._rearm_statuses(current_percentage)
-
-        status: str | None = None
-        if current_percentage > previous_percentage:
-            if previous_percentage < 100 <= current_percentage:
-                status = "full"
-            elif previous_percentage < 90 <= current_percentage:
-                status = "nearly_full"
-            elif previous_percentage < 80 <= current_percentage:
-                status = "good"
-        elif current_percentage < previous_percentage:
-            if previous_percentage >= 5 > current_percentage:
-                status = "empty"
-            elif previous_percentage > 10 >= current_percentage:
-                status = "very_low"
-            elif previous_percentage > 20 >= current_percentage:
-                status = "low"
-
-        if (
-            status is None
-            or status in self._announced_statuses
-            or self._on_fill_level_status_changed is None
-        ):
-            return
-
-        try:
-            self._on_fill_level_status_changed(level, status)
-        except Exception:
-            LOGGER.exception("Unable to announce rainwater tank status transition.")
-            return
-        self._announced_statuses.add(status)
-
-    def _rearm_statuses(self, fill_percentage: int) -> None:
-        """Rearm a status only after leaving its threshold by three points."""
-        if fill_percentage >= 23:
-            self._announced_statuses.discard("low")
-        if fill_percentage >= 13:
-            self._announced_statuses.discard("very_low")
-        if fill_percentage >= 8:
-            self._announced_statuses.discard("empty")
-        if fill_percentage <= 77:
-            self._announced_statuses.discard("good")
-        if fill_percentage <= 87:
-            self._announced_statuses.discard("nearly_full")
-        if fill_percentage <= 97:
-            self._announced_statuses.discard("full")

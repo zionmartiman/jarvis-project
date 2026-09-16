@@ -14,29 +14,11 @@ from speech.vosk_recognizer import VoskSpeechRecognizer
 from system.power_control import RaspberryPowerController
 
 
-_TANK_STATUS_MESSAGES = {
-    "full": "Depósito lleno.",
-    "nearly_full": "Depósito casi lleno.",
-    "good": "Buenos niveles de agua.",
-    "low": "Niveles de agua bajos.",
-    "very_low": "Niveles de agua muy bajos, se está a punto de quedar sin agua.",
-    "empty": "Depósito vacío.",
-}
-
-
 def announce_rainwater_tank_level(level: RainwaterTankLevel) -> None:
-    """Queue the periodic five-percentage-point tank-level announcement."""
-    enqueue_announcement(f"Deposito al {level.fill_percentage} por ciento.")
-
-
-def announce_rainwater_tank_status(
-    level: RainwaterTankLevel,
-    status: str,
-) -> None:
-    """Queue one spoken announcement when the tank enters a named state."""
-    del level
-    enqueue_announcement(_TANK_STATUS_MESSAGES[status])
-
+    """Queue an alert for one confirmed rainwater tank level change."""
+    enqueue_announcement(
+        f"El nivel del depósito de agua de lluvia está al {level.fill_percentage} por ciento."
+    )
 
 def build_orchestrator() -> tuple[
     ConversationOrchestrator,
@@ -79,7 +61,6 @@ def build_orchestrator() -> tuple[
         arduino=arduino,
         state_path=settings.RAINWATER_TANK_STATE_PATH,
         on_fill_level_changed=announce_rainwater_tank_level,
-        on_fill_level_status_changed=announce_rainwater_tank_status,
     )
     status_indicator.start_control_receiver()
     rainwater_tank_meter.start_polling()
