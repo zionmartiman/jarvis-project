@@ -1,0 +1,34 @@
+set -eu
+case "$(uname -m)" in
+  aarch64|arm64) ;;
+  *) printf '%s\n' 'This installer requires Linux ARM64. Run uname -m and choose the matching architecture in Vento.' >&2; exit 1 ;;
+esac
+wget -O ventoagent 'https://cloud.vento.build/public/clients/desktop/ventoagent-linux-arm64'
+chmod +x ventoagent
+cat > config.json <<'VENTO_DEVICE_CONFIG'
+{
+  "schemaVersion": 5,
+  "host": "https://cloud.vento.build",
+  "username": "",
+  "token": "",
+  "device_key": "vdk_9fed33b8880e48a9b3b9b665a4b53f8f_08d7aded24844d7db7440bfe1d81f97e7b9f0917501b4509a3511abdf4da5699",
+  "device_name": "jarvis_pi",
+  "network": "workspacedemarti",
+  "monitor_interval_seconds": 30,
+  "launch_mode": "background",
+  "features": [
+    "system",
+    "filesystem",
+    "commands",
+    "notifications",
+    "hid",
+    "camera",
+    "gpio",
+    "ota"
+  ],
+  "remote_agent_mode": "full-access",
+  "remote_agent_collaboration": true,
+  "remote_agent_max_concurrency": 1
+}
+VENTO_DEVICE_CONFIG
+nohup ./ventoagent -config ./config.json -no-gui -no-tray > ./ventoagent-background.log 2>&1 < /dev/null &

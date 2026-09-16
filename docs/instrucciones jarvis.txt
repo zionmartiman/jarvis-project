@@ -1,0 +1,53 @@
+ACCEDER POR SSH: 
+ssh jarvis@raspberrypi.local
+password: Jarvis
+
+Desde dentro del Proyecto:
+scp -r jarvis@raspberrypi.local:/home/jarvis/jarvis-project/*
+
+ver ram y cpu:
+htop
+
+Reiniciar servicio:
+jarvis-service daemon-reload
+jarvis-service restart jarvis-voice
+jarvis-service start jarvis-voice
+jarvis-service stop jarvis-voice
+jarvis-service status jarvis-voice
+
+Ver logs:
+tail -f /home/jarvis/jarvis-voice/jarvis-voice.log
+
+DEJAR DE ESCUCHAR
+"buenas noches",
+"pausar", 
+"pausate", 
+"pausar conversacion", 
+"espera", 
+"esperate", 
+"descansa"
+
+REINICIAR RASPBERRY
+"reinicia la raspberry",
+"reiniciar la raspberry",
+"reinicia el sistema",
+"reiniciar el sistema",
+"reiniciate",
+"reinicia",
+
+
+APAGAR RASPBERRY
+"apaga la raspberry",
+"apagar la raspberry",
+"apaga el sistema",
+"apagar el sistema",
+"apagate",
+"apagar"
+
+CONFIRMACIONES
+"si",
+"dale",
+"confirmo",
+"confirmar",
+"adelante",
+"claro"
