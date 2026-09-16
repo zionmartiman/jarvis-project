@@ -12,7 +12,7 @@ from core.conversation import ConversationOrchestrator
 from speech.azure_synthesizer import AzureSpeechSynthesizer
 from speech.vosk_recognizer import VoskSpeechRecognizer
 from system.power_control import RaspberryPowerController
-
+from Sensors.rainwater_tank_http_server import RainwaterTankHttpServer
 
 _TANK_STATUS_MESSAGES = {
     "full": "Depósito lleno.",
@@ -92,6 +92,11 @@ def build_orchestrator() -> tuple[
         status_indicator=status_indicator,
         max_history_items=settings.MAX_HISTORY_ITEMS,
     )
+    rainwater_tank_meter.start_polling()
+    rainwater_tank_http_server = RainwaterTankHttpServer(
+        latest_level=rainwater_tank_meter.latest_level,
+    )
+    rainwater_tank_http_server.start()
     return orchestrator, microphone, status_indicator, rainwater_tank_meter
 
 
@@ -104,6 +109,7 @@ def main() -> None:
         with microphone:
             orchestrator.run_forever()
     finally:
+        rainwater_tank_http_server.close()
         rainwater_tank_meter.close()
         status_indicator.close()
 
