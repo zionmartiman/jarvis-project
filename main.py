@@ -12,7 +12,7 @@ from core.conversation import ConversationOrchestrator
 from speech.azure_synthesizer import AzureSpeechSynthesizer
 from speech.vosk_recognizer import VoskSpeechRecognizer
 from system.power_control import RaspberryPowerController
-from Sensors.rainwater_tank_http_server import RainwaterTankHttpServer
+from Sensors.rainwater_tank_web_server import RainwaterTankWebServer
 
 _TANK_STATUS_MESSAGES = {
     "full": "Depósito lleno.",
@@ -82,7 +82,6 @@ def build_orchestrator() -> tuple[
         on_fill_level_status_changed=announce_rainwater_tank_status,
     )
     status_indicator.start_control_receiver()
-    rainwater_tank_meter.start_polling()
     orchestrator = ConversationOrchestrator(
         microphone=microphone,
         recognizer=recognizer,
@@ -93,23 +92,21 @@ def build_orchestrator() -> tuple[
         max_history_items=settings.MAX_HISTORY_ITEMS,
     )
     rainwater_tank_meter.start_polling()
-    rainwater_tank_http_server = RainwaterTankHttpServer(
+    rainwater_tank_web_server = RainwaterTankWebServer(
         latest_level=rainwater_tank_meter.latest_level,
     )
-    rainwater_tank_http_server.start()
-    return orchestrator, microphone, status_indicator, rainwater_tank_meter
+    rainwater_tank_web_server.start()
+    return orchestrator, microphone, status_indicator, rainwater_tank_meter, rainwater_tank_web_server
 
 
 def main() -> None:
-    orchestrator, microphone, status_indicator, rainwater_tank_meter = (
-        build_orchestrator()
-    )
+    orchestrator, microphone, status_indicator, rainwater_tank_meter, rainwater_tank_web_server = build_orchestrator()
     print("Jarvis por voz está listo. Di «Jarvis».", flush=True)
     try:
         with microphone:
             orchestrator.run_forever()
     finally:
-        rainwater_tank_http_server.close()
+        rainwater_tank_web_server.close()
         rainwater_tank_meter.close()
         status_indicator.close()
 

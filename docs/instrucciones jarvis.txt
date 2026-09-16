@@ -2,9 +2,6 @@ ACCEDER POR SSH:
 ssh jarvis@raspberrypi.local
 password: Jarvis
 
-Desde dentro del Proyecto:
-scp -r jarvis@raspberrypi.local:/home/jarvis/jarvis-project/*
-
 ver ram y cpu:
 htop
 
