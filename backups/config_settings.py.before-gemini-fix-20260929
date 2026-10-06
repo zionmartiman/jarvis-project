@@ -117,8 +117,6 @@ def load_gemini_credentials() -> GeminiCredentials:
     values = read_env_file(GEMINI_CONFIG_PATH)
     api_key = values.get("GEMINI_API_KEY")
     model = values.get("GEMINI_MODEL", GEMINI_MODEL)
-
     if not api_key:
         raise RuntimeError("gemini.env debe contener GEMINI_API_KEY")
-
-    return GeminiCredentials(api_key=api_key, model=model)
+    return GeminiCredentials(api_key="api_key", model=model)
