@@ -17,6 +17,7 @@ from core.interfaces import AssistantBridge
 from speech.azure_synthesizer import AzureSpeechSynthesizer
 from speech.vosk_recognizer import VoskSpeechRecognizer
 from system.power_control import RaspberryPowerController
+from system.shutdown_button_monitor import ShutdownButtonMonitor
 
 _TANK_STATUS_MESSAGES = {"full": "Depósito lleno.", "nearly_full": "Depósito casi lleno.", "good": "Buenos niveles de agua.", "low": "Niveles de agua bajos.", "very_low": "Niveles de agua muy bajos, se está a punto de quedar sin agua.", "empty": "Depósito vacío."}
 
@@ -39,7 +40,7 @@ def build_bridge(model: str) -> AssistantBridge:
     raise ValueError(f"Modelo no admitido: {model}")
 
 
-def build_orchestrator() -> tuple[ConversationOrchestrator, MicrophoneStream, ArduinoRgbIndicator, RainwaterTankMeter, RainwaterTankWebServer]:
+def build_orchestrator() -> tuple[ConversationOrchestrator, MicrophoneStream, ArduinoRgbIndicator, RainwaterTankMeter, RainwaterTankWebServer, ShutdownButtonMonitor]:
     azure_credentials = settings.load_azure_credentials()
     microphone = MicrophoneStream(sample_rate=settings.SAMPLE_RATE, device=settings.INPUT_DEVICE)
     recognizer = VoskSpeechRecognizer(microphone=microphone, model_path=settings.MODEL_PATH, sample_rate=settings.SAMPLE_RATE)
@@ -49,17 +50,19 @@ def build_orchestrator() -> tuple[ConversationOrchestrator, MicrophoneStream, Ar
     arduino.connect()
     status_indicator = ArduinoRgbIndicator(arduino=arduino, control_socket_path=settings.ARDUINO_CONTROL_SOCKET_PATH)
     shutdown_button_event = threading.Event()
-    rainwater_tank_meter = RainwaterTankMeter(arduino=arduino, state_path=settings.RAINWATER_TANK_STATE_PATH, on_fill_level_changed=announce_rainwater_tank_level, on_fill_level_status_changed=announce_rainwater_tank_status, on_shutdown_button_pressed=shutdown_button_event.set)
+    shutdown_button_monitor = ShutdownButtonMonitor(arduino=arduino, on_pressed=shutdown_button_event.set)
+    rainwater_tank_meter = RainwaterTankMeter(arduino=arduino, state_path=settings.RAINWATER_TANK_STATE_PATH, on_fill_level_changed=announce_rainwater_tank_level, on_fill_level_status_changed=announce_rainwater_tank_status)
     status_indicator.start_control_receiver()
+    shutdown_button_monitor.start()
     rainwater_tank_meter.start_polling()
     rainwater_tank_web_server = RainwaterTankWebServer(latest_level=rainwater_tank_meter.latest_level)
     rainwater_tank_web_server.start()
     orchestrator = ConversationOrchestrator(microphone=microphone, recognizer=recognizer, synthesizer=synthesizer, bridge_factory=build_bridge, power_controller=power_controller, status_indicator=status_indicator, max_history_items=settings.MAX_HISTORY_ITEMS, shutdown_button_event=shutdown_button_event)
-    return orchestrator, microphone, status_indicator, rainwater_tank_meter, rainwater_tank_web_server
+    return orchestrator, microphone, status_indicator, rainwater_tank_meter, rainwater_tank_web_server, shutdown_button_monitor
 
 
 def main() -> None:
-    orchestrator, microphone, status_indicator, rainwater_tank_meter, rainwater_tank_web_server = build_orchestrator()
+    orchestrator, microphone, status_indicator, rainwater_tank_meter, rainwater_tank_web_server, shutdown_button_monitor = build_orchestrator()
     print("Jarvis por voz está listo. Di «Jarvis».", flush=True)
     try:
         with microphone:
@@ -67,6 +70,7 @@ def main() -> None:
     finally:
         rainwater_tank_web_server.close()
         rainwater_tank_meter.close()
+        shutdown_button_monitor.close()
         status_indicator.close()
 
 
