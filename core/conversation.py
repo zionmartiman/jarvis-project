@@ -22,17 +22,21 @@ class ConversationOrchestrator:
         self._status_indicator = status_indicator
         self._max_history_items = max_history_items
         self._shutdown_button_event = shutdown_button_event or threading.Event()
+        self._shutdown_started = threading.Event()
+        self._speech_lock = threading.Lock()
 
     def run_forever(self) -> None:
+        threading.Thread(
+            target=self._watch_shutdown_button,
+            name="shutdown-button-watcher",
+            daemon=True,
+        ).start()
         self._speak("Sistemas listos. Que modelo usamos señor?")
         self._choose_assistant()
         while True:
             self._set_status(AssistantStatus.WAITING)
             print("Esperando la palabra «Jarvis»...", flush=True)
-            button_pressed = self._recognizer.wait_for_wake_word(self._shutdown_button_event)
-            if button_pressed:
-                self._run_button_shutdown_confirmation()
-                continue
+            self._recognizer.wait_for_wake_word()
             try:
                 self._run_conversation()
             except Exception as error:
@@ -40,7 +44,7 @@ class ConversationOrchestrator:
                 self._microphone.clear()
 
     def _choose_assistant(self) -> None:
-        choices = {"google": ("gemini", "Gemini"), "el rapido": ("gemini", "Gemini"), "vento": ("vento", "Vento"), "el lento": ("vento", "Vento")}
+        choices = {"google": ("gemini", "Gemini"), "el primero": ("gemini", "Gemini"), "vento": ("vento", "Vento"), "el lento": ("vento", "Vento")}
         while self._bridge is None:
             choice = self._listen_for_sentence().strip().lower()
             selected = choices.get(choice)
@@ -72,14 +76,36 @@ class ConversationOrchestrator:
                 return
             self._handle_turn(command, history)
 
-    def _run_button_shutdown_confirmation(self) -> None:
-        self._speak("¿Está seguro de que quiere apagarme señor?")
-        confirmation = self._listen_for_sentence()
-        if intents.is_confirmation(confirmation):
-            self._speak("Apagado manual accionado, apagado de los sistemas iniciado.")
+    def _run_button_shutdown(self) -> None:
+        if self._shutdown_started.is_set():
+            return
+        self._shutdown_started.set()
+        print("Botón de apagado: interrumpiendo Jarvis y apagando el sistema.", flush=True)
+        self._microphone.stop_capture()
+
+        while not self._speech_lock.acquire(timeout=0.05):
+            try:
+                self._synthesizer.interrupt()
+            except Exception as error:
+                print(f"Error interrumpiendo la voz: {error}", file=sys.stderr, flush=True)
+
+        try:
+            self._synthesizer.interrupt()
+            self._set_status(AssistantStatus.SPEAKING)
+            self._synthesizer.speak("Apagado manual accionado!, apagando sistemas.")
+        except Exception as error:
+            print(f"Error reproduciendo el aviso de apagado: {error}", file=sys.stderr, flush=True)
+        finally:
+            self._speech_lock.release()
+
+        try:
             self._power_controller.shutdown()
-        else:
-            self._speak("Apagado cancelado, señor.")
+        except Exception as error:
+            print(f"Error apagando el sistema: {error}", file=sys.stderr, flush=True)
+
+    def _watch_shutdown_button(self) -> None:
+        self._shutdown_button_event.wait()
+        self._run_button_shutdown()
 
     def _handle_power_command(self, command_text: str) -> bool | None:
         if intents.wants_to_shutdown(command_text):
@@ -125,6 +151,15 @@ class ConversationOrchestrator:
             print(f"Error actualizando el LED de estado: {error}", file=sys.stderr, flush=True)
 
     def _speak(self, text: str) -> None:
-        self._set_status(AssistantStatus.SPEAKING)
-        self._microphone.stop_capture()
-        self._synthesizer.speak(text)
+        if self._shutdown_started.is_set():
+            return
+        with self._speech_lock:
+            if self._shutdown_started.is_set():
+                return
+            self._set_status(AssistantStatus.SPEAKING)
+            self._microphone.stop_capture()
+            try:
+                self._synthesizer.speak(text)
+            except Exception:
+                if not self._shutdown_started.is_set():
+                    raise

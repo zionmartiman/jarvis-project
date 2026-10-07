@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 
 import azure.cognitiveservices.speech as speechsdk
@@ -39,6 +40,10 @@ class AzureSpeechSynthesizer(SpeechSynthesizer):
         output_device: str,
     ):
         self._output_device = output_device
+        self._active_lock = threading.Lock()
+        self._active_generation = 0
+        self._active_player: RawPcmPlayer | None = None
+        self._active_synthesizer = None
         self._speech_config = speechsdk.SpeechConfig(
             subscription=credentials.key,
             region=credentials.region,
@@ -50,6 +55,18 @@ class AzureSpeechSynthesizer(SpeechSynthesizer):
 
     def speak(self, text: str) -> None:
         self.speak_with_playback_callbacks(text)
+
+    def interrupt(self) -> None:
+        """Stop current Azure synthesis and terminate its active audio player."""
+        with self._active_lock:
+            self._active_generation += 1
+            player = self._active_player
+            synthesizer = self._active_synthesizer
+
+        if player is not None:
+            player.interrupt()
+        if synthesizer is not None:
+            synthesizer.stop_speaking_async().get()
 
     def speak_with_playback_callbacks(
         self,
@@ -70,6 +87,9 @@ class AzureSpeechSynthesizer(SpeechSynthesizer):
                 self._run_callback(on_playback_finished)
 
     def _speak_while_locked(self, text: str) -> None:
+        with self._active_lock:
+            generation = self._active_generation
+
         player = RawPcmPlayer(self._output_device)
         adapter = _AzureStreamAdapter(player)
         push_stream = speechsdk.audio.PushAudioOutputStream(adapter)
@@ -78,12 +98,29 @@ class AzureSpeechSynthesizer(SpeechSynthesizer):
             speech_config=self._speech_config,
             audio_config=audio_config,
         )
+        with self._active_lock:
+            if generation != self._active_generation:
+                player.interrupt()
+                return
+            self._active_player = player
+            self._active_synthesizer = synthesizer
         result = None
 
         try:
             result = synthesizer.speak_text_async(text).get()
         finally:
-            player.finish()
+            try:
+                player.finish()
+            finally:
+                with self._active_lock:
+                    if self._active_player is player:
+                        self._active_player = None
+                        self._active_synthesizer = None
+
+        with self._active_lock:
+            was_interrupted = generation != self._active_generation
+        if was_interrupted:
+            return
 
         if (
             result is None

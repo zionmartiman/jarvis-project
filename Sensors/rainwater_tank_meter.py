@@ -102,7 +102,9 @@ class RainwaterTankMeter:
         response = self._arduino.request(self._BUTTON_COMMAND)
         if response != "BUTTON_SHUTDOWN":
             return
+        print("Botón físico de apagado detectado por Arduino.", flush=True)
         if self._on_shutdown_button_pressed is None:
+            LOGGER.warning("Shutdown button detected without an event handler.")
             return
         try:
             self._on_shutdown_button_pressed()

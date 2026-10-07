@@ -27,6 +27,7 @@ unsigned long yellowBlinkStartedAt = 0;
 unsigned long alertBlinkStartedAt = 0;
 bool shutdownButtonLatched = false;
 bool lastButtonReading = HIGH;
+bool stableButtonState = HIGH;
 unsigned long buttonChangedAt = 0;
 const unsigned long BUTTON_DEBOUNCE_MS = 40;
 
@@ -112,8 +113,12 @@ void updateShutdownButton() {
     buttonChangedAt = millis();
     lastButtonReading = reading;
   }
-  if (millis() - buttonChangedAt >= BUTTON_DEBOUNCE_MS && reading == LOW) {
-    shutdownButtonLatched = true;
+  if (millis() - buttonChangedAt >= BUTTON_DEBOUNCE_MS &&
+      reading != stableButtonState) {
+    stableButtonState = reading;
+    if (stableButtonState == LOW) {
+      shutdownButtonLatched = true;
+    }
   }
 }
 
@@ -170,6 +175,15 @@ void loop() {
     else if (command == "STATE OFF") setMode(OFF);
     else if (command == "LIGHT ALERT ON") setAlertLight(true);
     else if (command == "LIGHT ALERT OFF") setAlertLight(false);
+    else if (command == "BUTTON STATUS") {
+      if (shutdownButtonLatched) {
+        shutdownButtonLatched = false;
+        Serial.println("BUTTON_SHUTDOWN");
+      } else {
+        Serial.println("BUTTON_IDLE");
+      }
+      return;
+    }
     else if (command == "SENSOR DISTANCE") {
       float distanceCm = readUltrasonicDistanceCm();
       Serial.print("DISTANCE_CM ");

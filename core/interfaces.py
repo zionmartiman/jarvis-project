@@ -40,6 +40,10 @@ class SpeechSynthesizer(ABC):
         """Sintetiza `text` y lo reproduce. Bloquea hasta terminar."""
         raise NotImplementedError
 
+    def interrupt(self) -> None:
+        """Detiene la reproducción actual, si el sintetizador lo permite."""
+        return None
+
 
 class AssistantBridge(ABC):
     """Envía mensajes de texto al asistente de IA y recibe su respuesta."""

@@ -44,6 +44,7 @@ class RawPcmPlayer:
             bufsize=0,
         )
         self.closed = False
+        self.interrupted = False
         self.write_error: Exception | None = None
 
     def write(self, audio_buffer) -> int:
@@ -66,10 +67,20 @@ class RawPcmPlayer:
             except BrokenPipeError:
                 pass
 
+    def interrupt(self) -> None:
+        if self.interrupted:
+            return
+        self.interrupted = True
+        self.closed = True
+        try:
+            self.process.terminate()
+        except OSError:
+            pass
+
     def finish(self) -> None:
         self.close()
         return_code = self.process.wait()
-        if self.write_error:
+        if self.write_error and not self.interrupted:
             raise RuntimeError(f"Error sending audio to aplay: {self.write_error}")
-        if return_code != 0:
+        if return_code != 0 and not self.interrupted:
             raise RuntimeError(f"aplay exited with code {return_code}")
