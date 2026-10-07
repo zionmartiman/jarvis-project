@@ -40,7 +40,7 @@ class ConversationOrchestrator:
                 self._microphone.clear()
 
     def _choose_assistant(self) -> None:
-        choices = {"google": ("gemini", "Gemini"), "el primero": ("gemini", "Gemini"), "vento": ("vento", "Vento"), "el segundo": ("vento", "Vento")}
+        choices = {"google": ("gemini", "Gemini"), "el rapido": ("gemini", "Gemini"), "vento": ("vento", "Vento"), "el lento": ("vento", "Vento")}
         while self._bridge is None:
             choice = self._listen_for_sentence().strip().lower()
             selected = choices.get(choice)
@@ -59,7 +59,7 @@ class ConversationOrchestrator:
 
     def _run_conversation(self) -> None:
         history: list[dict] = []
-        self._speak("Sí señor?")
+        self._speak("Dime")
         while True:
             command = self._listen_for_sentence()
             power_result = self._handle_power_command(command)
