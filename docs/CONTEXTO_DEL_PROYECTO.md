@@ -21,14 +21,14 @@ Arduino Mega
   -> LED RGB de estado de Jarvis
   -> LED independiente para avisos
   -> sensor ultrasónico HC-SR04
-  -> botón físico de apagado maestro
-  -> lecturas y estado del botón consultados por el proceso Python
+  -> botón físico de apagado maestro y botón de interrupción de respuesta
+  -> lecturas y estado de ambos botones consultados por el proceso Python
 
 Proceso Python
   -> estado actual del depósito en JSON
   -> servidor HTTP con panel y API de nivel
   -> avisos locales de cambios de nivel, si el receptor de anuncios está activo
-  -> monitor independiente del botón que activa el apagado maestro
+  -> monitor independiente de los botones físicos
 ```
 
 El punto de composición principal es [main.py](main.py). La configuración central está en [config/settings.py](config/settings.py); los valores privados se cargan desde archivos separados y no se incluyen en este documento.
@@ -42,14 +42,15 @@ El punto de composición principal es [main.py](main.py). La configuración cent
 - En el firmware versionado, el LED RGB de cátodo común usa rojo en D9, verde en D10 y azul en D11.
 - El HC-SR04 usa TRIG en D7 y ECHO en D8. El firmware mide el pulso de eco y responde a peticiones serie; no transmite una lectura por iniciativa propia cada segundo.
 - El pulsador de apagado maestro se conecta entre D2 y GND. D2 está configurado como `INPUT_PULLUP`, por lo que no requiere resistencia externa: en reposo lee HIGH y al pulsar lee LOW. Debe ser un pulsador normalmente abierto; no se debe conectar D2 a 5 V.
+- El pulsador para interrumpir una respuesta hablada se conecta entre D3 y GND. D3 también está configurado como `INPUT_PULLUP`; no requiere resistencia externa y debe usarse un pulsador normalmente abierto.
 - El LED independiente de avisos está declarado como **rojo** en D12. El código no declara un LED blanco. Si la instalación física tiene uno blanco, el color del componente real no queda reflejado en el firmware.
 
 Las conexiones aparecen documentadas en el firmware [ARDUINO/Main program/main.cs](ARDUINO/Main%20program/main.cs). La longitud de 10 metros del cable hacia el depósito forma parte del contexto físico descrito por el propietario, pero no es verificable desde el código.
 
 ## Arranque y selección del agente
 
-1. `main.py` construye el micrófono, el reconocedor Vosk, Azure Speech, la conexión Arduino, el indicador de estado, el monitor del botón, el medidor y el servidor web.
-2. El monitor del botón, el medidor y el servidor web se inician antes de entrar en el bucle de conversación.
+1. `main.py` construye el micrófono, el reconocedor Vosk, Azure Speech, la conexión Arduino, el indicador de estado, el monitor de botones, el medidor y el servidor web.
+2. El monitor de botones, el medidor y el servidor web se inician antes de entrar en el bucle de conversación.
 3. Jarvis solicita por voz elegir Gemini diciendo «uno» o «1», o Vento diciendo «dos» o «2».
 4. Solo se crea el puente elegido. Gemini usa por defecto `gemini-2.5-flash`; Vento envía texto al puente configurado.
 5. La conversación conserva hasta seis elementos de historial (tres pares usuario/asistente) durante la sesión activa. Ese historial se reinicia al volver al modo de espera.
@@ -87,13 +88,15 @@ El azul sube y baja con una semionda de un segundo; el amarillo cambia de estado
 
 «Descansa» y otras frases reservadas terminan la conversación activa y devuelven el programa a espera de «Jarvis»; no detienen el proceso. También existen frases para solicitar apagado o reinicio, con confirmación hablada. La implementación de las frases está en [core/intents.py](core/intents.py), y las acciones de sistema en [system/power_control.py](system/power_control.py). Apagar/reiniciar depende de que el sistema operativo permita `sudo -n` para esos comandos.
 
-### Botón físico de apagado maestro
+### Botones físicos
 
-El botón se sondea independientemente del medidor mediante [system/shutdown_button_monitor.py](system/shutdown_button_monitor.py). El monitor consulta `BUTTON STATUS` al Arduino cada 0,1 segundos; el firmware responde `BUTTON_SHUTDOWN` una sola vez por pulsación estable y `BUTTON_IDLE` en reposo. El antirrebote y la detección de flanco están en [ARDUINO/Main program/main.cs](ARDUINO/Main%20program/main.cs).
+Ambos pulsadores se sondean independientemente del medidor mediante [system/arduino_button_monitor.py](system/arduino_button_monitor.py). El monitor consulta `BUTTON STATUS` al Arduino cada 0,1 segundos; el firmware responde `BUTTON_SHUTDOWN` para el botón de D2, `BUTTON_INTERRUPT` para el botón de D3 y `BUTTON_IDLE` cuando no hay una pulsación pendiente. Las dos entradas tienen antirrebote y detección de flanco en [ARDUINO/Main program/main.cs](ARDUINO/Main%20program/main.cs).
 
-Al detectar una pulsación, el monitor activa un evento compartido con [core/conversation.py](core/conversation.py). Un hilo vigilante del orquestador espera ese evento desde el inicio de la conversación, incluso antes de seleccionar Gemini o Vento, mientras se escucha y mientras se procesa una respuesta. El apagado maestro detiene la captura del micrófono, interrumpe la síntesis/reproducción activa de Azure y `aplay`, anuncia «Apagado manual accionado!, apagando sistemas.» y llama a `poweroff`. Las operaciones para interrumpir el audio están en [speech/azure_synthesizer.py](speech/azure_synthesizer.py) y [audio/player.py](audio/player.py).
+El botón de D2 activa el apagado maestro en cualquier fase: detiene la captura del micrófono, interrumpe la síntesis/reproducción activa de Azure y `aplay`, anuncia «Apagado manual accionado!, apagando sistemas.» y llama a `poweroff`. Las operaciones para interrumpir el audio están en [speech/azure_synthesizer.py](speech/azure_synthesizer.py) y [audio/player.py](audio/player.py).
 
-La solicitud de apagado del sistema depende de que `sudo -n /usr/sbin/poweroff` esté autorizado para el usuario que ejecuta Jarvis. El botón no solicita confirmación hablada.
+El botón de D3 solo actúa mientras Jarvis reproduce en voz alta una respuesta de Gemini o Vento. Corta esa respuesta, dice «Sí, dime» y el siguiente paso del diálogo escucha una nueva instrucción. Pulsarlo durante otras locuciones, durante la escucha o mientras el modelo todavía está generando texto no interrumpe esas fases.
+
+La solicitud de apagado del sistema depende de que `sudo -n /usr/sbin/poweroff` esté autorizado para el usuario que ejecuta Jarvis. El botón de D2 no solicita confirmación hablada.
 
 ## Depósito de agua pluvial
 
@@ -181,7 +184,7 @@ Estos puntos afectan a la diferencia entre el repositorio y la instalación desc
 - Captura y reconocimiento local: [audio/microphone_stream.py](audio/microphone_stream.py), [speech/vosk_recognizer.py](speech/vosk_recognizer.py)
 - Puentes Gemini y Vento: [bridge/gemini_bridge.py](bridge/gemini_bridge.py), [bridge/vento_bridge.py](bridge/vento_bridge.py)
 - Síntesis Azure y reproducción: [speech/azure_synthesizer.py](speech/azure_synthesizer.py), [audio/player.py](audio/player.py)
-- Monitor del botón de apagado maestro: [system/shutdown_button_monitor.py](system/shutdown_button_monitor.py)
+- Monitor de botones físicos: [system/arduino_button_monitor.py](system/arduino_button_monitor.py)
 - Indicadores y medidor: [Indicators/arduino_rgb_indicator.py](Indicators/arduino_rgb_indicator.py), [Indicators/arduino_alert_client.py](Indicators/arduino_alert_client.py), [Sensors/rainwater_tank_meter.py](Sensors/rainwater_tank_meter.py)
 - Panel web y receptor de avisos: [Sensors/rainwater_tank_web_server.py](Sensors/rainwater_tank_web_server.py), [notifications/announcement_service.py](notifications/announcement_service.py)
 - Firmware Arduino: [ARDUINO/Main program/main.cs](ARDUINO/Main%20program/main.cs)

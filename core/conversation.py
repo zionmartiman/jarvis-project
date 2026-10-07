@@ -12,7 +12,7 @@ from core.interfaces import AssistantBridge, AssistantStatus, SpeechRecognizer, 
 
 
 class ConversationOrchestrator:
-    def __init__(self, microphone: MicrophoneStream, recognizer: SpeechRecognizer, synthesizer: SpeechSynthesizer, bridge_factory: Callable[[str], AssistantBridge], power_controller: SystemController, status_indicator: StatusIndicator, max_history_items: int, shutdown_button_event: threading.Event | None = None):
+    def __init__(self, microphone: MicrophoneStream, recognizer: SpeechRecognizer, synthesizer: SpeechSynthesizer, bridge_factory: Callable[[str], AssistantBridge], power_controller: SystemController, status_indicator: StatusIndicator, max_history_items: int, shutdown_button_event: threading.Event | None = None, response_interrupt_event: threading.Event | None = None):
         self._microphone = microphone
         self._recognizer = recognizer
         self._synthesizer = synthesizer
@@ -22,13 +22,21 @@ class ConversationOrchestrator:
         self._status_indicator = status_indicator
         self._max_history_items = max_history_items
         self._shutdown_button_event = shutdown_button_event or threading.Event()
+        self._response_interrupt_event = response_interrupt_event or threading.Event()
         self._shutdown_started = threading.Event()
+        self._model_reply_active = threading.Event()
+        self._model_reply_interrupted = threading.Event()
         self._speech_lock = threading.Lock()
 
     def run_forever(self) -> None:
         threading.Thread(
             target=self._watch_shutdown_button,
             name="shutdown-button-watcher",
+            daemon=True,
+        ).start()
+        threading.Thread(
+            target=self._watch_response_interrupt_button,
+            name="response-interrupt-button-watcher",
             daemon=True,
         ).start()
         self._speak("Sistemas listos. Que modelo usamos señor?")
@@ -107,6 +115,20 @@ class ConversationOrchestrator:
         self._shutdown_button_event.wait()
         self._run_button_shutdown()
 
+    def _watch_response_interrupt_button(self) -> None:
+        while not self._shutdown_started.is_set():
+            self._response_interrupt_event.wait()
+            self._response_interrupt_event.clear()
+            if self._shutdown_started.is_set():
+                return
+            if not self._model_reply_active.is_set():
+                continue
+            self._model_reply_interrupted.set()
+            try:
+                self._synthesizer.interrupt()
+            except Exception as error:
+                print(f"Error interrumpiendo la respuesta del modelo: {error}", file=sys.stderr, flush=True)
+
     def _handle_power_command(self, command_text: str) -> bool | None:
         if intents.wants_to_shutdown(command_text):
             return self._confirm_and_run("¿Está seguro de que quiere apagarme señor?", "Venga a tomar por culo. Tirando del cable... Chao!.", "Apagado cancelado, señor.", self._power_controller.shutdown)
@@ -133,12 +155,25 @@ class ConversationOrchestrator:
             history.extend([{"role": "user", "text": command}, {"role": "assistant", "text": reply}])
             if len(history) > self._max_history_items:
                 del history[:-self._max_history_items]
-            self._speak(reply)
+            self._speak_model_reply(reply)
             self._microphone.clear()
         except Exception as error:
             print(f"Error procesando el mensaje: {error}", file=sys.stderr, flush=True)
             self._speak("Lo siento, he tenido un problema al procesar la petición. Puede repetirla.")
             self._microphone.clear()
+
+    def _speak_model_reply(self, reply: str) -> None:
+        self._model_reply_interrupted.clear()
+        self._model_reply_active.set()
+        try:
+            self._speak(reply)
+        finally:
+            self._model_reply_active.clear()
+
+        was_interrupted = self._model_reply_interrupted.is_set()
+        self._model_reply_interrupted.clear()
+        if was_interrupted and not self._shutdown_started.is_set():
+            self._speak("Sí, dime")
 
     def _listen_for_sentence(self) -> str:
         self._set_status(AssistantStatus.LISTENING)

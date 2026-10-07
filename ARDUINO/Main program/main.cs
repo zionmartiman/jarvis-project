@@ -8,6 +8,8 @@
 // GND  -> GND
 // TRIG -> D7
 // ECHO -> D8
+// Boton de apagado: pulsador normalmente abierto entre D2 y GND.
+// Boton de interrupcion: pulsador normalmente abierto entre D3 y GND.
 
 const byte PIN_RED = 9;
 const byte PIN_GREEN = 10;
@@ -17,6 +19,7 @@ const byte PIN_ALERT_LIGHT = 12;
 const byte PIN_ULTRASONIC_TRIG = 7;
 const byte PIN_ULTRASONIC_ECHO = 8;
 const byte PIN_SHUTDOWN_BUTTON = 2;
+const byte PIN_RESPONSE_INTERRUPT_BUTTON = 3;
 
 enum LedMode { RED, GREEN, BREATHING_BLUE, BLINKING_YELLOW, OFF };
 
@@ -29,6 +32,10 @@ bool shutdownButtonLatched = false;
 bool lastButtonReading = HIGH;
 bool stableButtonState = HIGH;
 unsigned long buttonChangedAt = 0;
+bool responseInterruptButtonLatched = false;
+bool lastResponseInterruptButtonReading = HIGH;
+bool stableResponseInterruptButtonState = HIGH;
+unsigned long responseInterruptButtonChangedAt = 0;
 const unsigned long BUTTON_DEBOUNCE_MS = 40;
 
 const unsigned long BREATHING_HALF_CYCLE_MS = 1000;
@@ -122,6 +129,21 @@ void updateShutdownButton() {
   }
 }
 
+void updateResponseInterruptButton() {
+  bool reading = digitalRead(PIN_RESPONSE_INTERRUPT_BUTTON);
+  if (reading != lastResponseInterruptButtonReading) {
+    responseInterruptButtonChangedAt = millis();
+    lastResponseInterruptButtonReading = reading;
+  }
+  if (millis() - responseInterruptButtonChangedAt >= BUTTON_DEBOUNCE_MS &&
+      reading != stableResponseInterruptButtonState) {
+    stableResponseInterruptButtonState = reading;
+    if (stableResponseInterruptButtonState == LOW) {
+      responseInterruptButtonLatched = true;
+    }
+  }
+}
+
 float readUltrasonicDistanceCm() {
   digitalWrite(PIN_ULTRASONIC_TRIG, LOW);
   delayMicroseconds(2);
@@ -147,6 +169,7 @@ void setup() {
   pinMode(PIN_ULTRASONIC_TRIG, OUTPUT);
   pinMode(PIN_ULTRASONIC_ECHO, INPUT);
   pinMode(PIN_SHUTDOWN_BUTTON, INPUT_PULLUP);
+  pinMode(PIN_RESPONSE_INTERRUPT_BUTTON, INPUT_PULLUP);
   digitalWrite(PIN_ULTRASONIC_TRIG, LOW);
 
   Serial.begin(115200);
@@ -162,6 +185,7 @@ void loop() {
   updateYellowBlink();
   updateAlertBlink();
   updateShutdownButton();
+  updateResponseInterruptButton();
 
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n');
@@ -179,6 +203,9 @@ void loop() {
       if (shutdownButtonLatched) {
         shutdownButtonLatched = false;
         Serial.println("BUTTON_SHUTDOWN");
+      } else if (responseInterruptButtonLatched) {
+        responseInterruptButtonLatched = false;
+        Serial.println("BUTTON_INTERRUPT");
       } else {
         Serial.println("BUTTON_IDLE");
       }

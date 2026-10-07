@@ -1,4 +1,4 @@
-"""Monitors the Arduino shutdown button independently of tank measurements."""
+"""Monitors physical Arduino buttons independently of tank measurements."""
 
 from __future__ import annotations
 
@@ -13,20 +13,21 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class ShutdownButtonMonitor:
-    """Polls the Arduino button status and reports each latched press."""
+class ArduinoButtonMonitor:
+    """Polls button status and dispatches shutdown and reply-interrupt presses."""
 
     _BUTTON_COMMAND = "BUTTON STATUS"
-    _PRESSED_RESPONSE = "BUTTON_SHUTDOWN"
 
     def __init__(
         self,
         arduino: ArduinoMegaConnection,
-        on_pressed: Callable[[], None],
+        on_shutdown_pressed: Callable[[], None],
+        on_response_interrupt_pressed: Callable[[], None],
         poll_interval_seconds: float = 0.1,
     ) -> None:
         self._arduino = arduino
-        self._on_pressed = on_pressed
+        self._on_shutdown_pressed = on_shutdown_pressed
+        self._on_response_interrupt_pressed = on_response_interrupt_pressed
         self._poll_interval_seconds = poll_interval_seconds
         self._stop_monitoring = threading.Event()
         self._monitoring_thread: threading.Thread | None = None
@@ -36,8 +37,8 @@ class ShutdownButtonMonitor:
             return
         self._stop_monitoring.clear()
         self._monitoring_thread = threading.Thread(
-            target=self._monitor_button,
-            name="shutdown-button-monitor",
+            target=self._monitor_buttons,
+            name="arduino-button-monitor",
             daemon=True,
         )
         self._monitoring_thread.start()
@@ -48,13 +49,21 @@ class ShutdownButtonMonitor:
             self._monitoring_thread.join(timeout=3)
             self._monitoring_thread = None
 
-    def _monitor_button(self) -> None:
+    def _monitor_buttons(self) -> None:
         while not self._stop_monitoring.is_set():
             response = self._arduino.request(self._BUTTON_COMMAND)
-            if response == self._PRESSED_RESPONSE:
+            callback = None
+            if response == "BUTTON_SHUTDOWN":
                 print("Botón físico de apagado detectado por Arduino.", flush=True)
+                callback = self._on_shutdown_pressed
+            elif response == "BUTTON_INTERRUPT":
+                print("Botón para interrumpir la respuesta detectado por Arduino.", flush=True)
+                callback = self._on_response_interrupt_pressed
+
+            if callback is not None:
                 try:
-                    self._on_pressed()
+                    callback()
                 except Exception:
-                    LOGGER.exception("Unable to handle shutdown button press.")
+                    LOGGER.exception("Unable to handle Arduino button press.")
+
             self._stop_monitoring.wait(self._poll_interval_seconds)
