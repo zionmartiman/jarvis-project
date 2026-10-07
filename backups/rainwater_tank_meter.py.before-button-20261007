@@ -35,7 +35,6 @@ class RainwaterTankMeter:
 
     _DISTANCE_COMMAND = "SENSOR DISTANCE"
     _DISTANCE_PREFIX = "DISTANCE_CM "
-    _BUTTON_COMMAND = "BUTTON STATUS"
 
     def __init__(
         self,
@@ -45,14 +44,12 @@ class RainwaterTankMeter:
         on_fill_level_status_changed: (
             Callable[[RainwaterTankLevel, str], None] | None
         ) = None,
-        on_shutdown_button_pressed: Callable[[], None] | None = None,
         poll_interval_seconds: float = 0.5,
     ) -> None:
         self._arduino = arduino
         self._state_path = state_path
         self._on_fill_level_changed = on_fill_level_changed
         self._on_fill_level_status_changed = on_fill_level_status_changed
-        self._on_shutdown_button_pressed = on_shutdown_button_pressed
         self._poll_interval_seconds = poll_interval_seconds
         self._latest_level: RainwaterTankLevel | None = None
         self._latest_level_lock = threading.Lock()
@@ -98,17 +95,6 @@ class RainwaterTankMeter:
             self._polling_thread.join(timeout=1)
             self._polling_thread = None
 
-    def _check_shutdown_button(self) -> None:
-        response = self._arduino.request(self._BUTTON_COMMAND)
-        if response != "BUTTON_SHUTDOWN":
-            return
-        if self._on_shutdown_button_pressed is None:
-            return
-        try:
-            self._on_shutdown_button_pressed()
-        except Exception:
-            LOGGER.exception("Unable to handle shutdown button press.")
-
     def _read_distance_cm(self) -> float | None:
         response = self._arduino.request(self._DISTANCE_COMMAND)
         if response is None:
@@ -137,7 +123,6 @@ class RainwaterTankMeter:
 
     def _poll_levels(self) -> None:
         while not self._stop_polling.is_set():
-            self._check_shutdown_button()
             level = self.read_level()
             if level is not None:
                 self._publish(level)

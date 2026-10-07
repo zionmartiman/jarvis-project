@@ -13,8 +13,6 @@ from __future__ import annotations
 
 import json
 import time
-import threading
-import queue
 from pathlib import Path
 
 from vosk import KaldiRecognizer, Model
@@ -44,7 +42,7 @@ class VoskSpeechRecognizer(SpeechRecognizer):
         print(f"Cargando modelo local: {model_path}", flush=True)
         self._model = Model(str(model_path))
 
-    def wait_for_wake_word(self, interrupt_event: threading.Event | None = None) -> bool:
+    def wait_for_wake_word(self) -> None:
         """
         Escucha únicamente la palabra de activación.
 
@@ -61,20 +59,14 @@ class VoskSpeechRecognizer(SpeechRecognizer):
 
         try:
             while True:
-                if interrupt_event is not None and interrupt_event.is_set():
-                    interrupt_event.clear()
-                    return True
-                try:
-                    audio = self._microphone.read_chunk(timeout=0.2)
-                except queue.Empty:
-                    continue
+                audio = self._microphone.read_chunk()
 
                 if recognizer.AcceptWaveform(audio):
                     result = json.loads(recognizer.Result())
                     text = result.get("text", "").lower()
 
                     if self._wake_word in text:
-                        return False
+                        return
         finally:
             self._microphone.stop_capture()
 

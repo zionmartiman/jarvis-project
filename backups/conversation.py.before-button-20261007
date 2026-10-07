@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable
-import threading
 
 from audio.microphone_stream import MicrophoneStream
 from core import intents
@@ -12,7 +11,7 @@ from core.interfaces import AssistantBridge, AssistantStatus, SpeechRecognizer, 
 
 
 class ConversationOrchestrator:
-    def __init__(self, microphone: MicrophoneStream, recognizer: SpeechRecognizer, synthesizer: SpeechSynthesizer, bridge_factory: Callable[[str], AssistantBridge], power_controller: SystemController, status_indicator: StatusIndicator, max_history_items: int, shutdown_button_event: threading.Event | None = None):
+    def __init__(self, microphone: MicrophoneStream, recognizer: SpeechRecognizer, synthesizer: SpeechSynthesizer, bridge_factory: Callable[[str], AssistantBridge], power_controller: SystemController, status_indicator: StatusIndicator, max_history_items: int):
         self._microphone = microphone
         self._recognizer = recognizer
         self._synthesizer = synthesizer
@@ -21,18 +20,14 @@ class ConversationOrchestrator:
         self._power_controller = power_controller
         self._status_indicator = status_indicator
         self._max_history_items = max_history_items
-        self._shutdown_button_event = shutdown_button_event or threading.Event()
 
     def run_forever(self) -> None:
-        self._speak("Sistemas listos. Que modelo usamos señor?")
+        self._speak("Sistemas listos. Para usar Gemini diga uno. Para usar Vento diga dos.")
         self._choose_assistant()
         while True:
             self._set_status(AssistantStatus.WAITING)
             print("Esperando la palabra «Jarvis»...", flush=True)
-            button_pressed = self._recognizer.wait_for_wake_word(self._shutdown_button_event)
-            if button_pressed:
-                self._run_button_shutdown_confirmation()
-                continue
+            self._recognizer.wait_for_wake_word()
             try:
                 self._run_conversation()
             except Exception as error:
@@ -40,21 +35,21 @@ class ConversationOrchestrator:
                 self._microphone.clear()
 
     def _choose_assistant(self) -> None:
-        choices = {"google": ("gemini", "Gemini"), "el primero": ("gemini", "Gemini"), "vento": ("vento", "Vento"), "el segundo": ("vento", "Vento")}
+        choices = {"uno": ("gemini", "Gemini"), "1": ("gemini", "Gemini"), "dos": ("vento", "Vento"), "2": ("vento", "Vento")}
         while self._bridge is None:
             choice = self._listen_for_sentence().strip().lower()
             selected = choices.get(choice)
             if selected is None:
-                self._speak("No me entero. Usamos gemini o vento?")
+                self._speak("No he entendido la opción. Diga uno para Gemini o dos para Vento.")
                 continue
             model, name = selected
             try:
                 self._bridge = self._bridge_factory(model)
             except Exception as error:
                 print(f"Error preparando {name}: {error}", file=sys.stderr, flush=True)
-                self._speak(f"No puedo preparar {name}.")
+                self._speak(f"No puedo preparar {name}. Diga uno para Gemini o dos para Vento.")
                 continue
-            self._speak(f"{name} preparado.")
+            self._speak(f"Usaré {name}, señor.")
             self._microphone.clear()
 
     def _run_conversation(self) -> None:
@@ -68,24 +63,15 @@ class ConversationOrchestrator:
             if power_result is False:
                 continue
             if intents.wants_to_end_conversation(command):
-                self._speak("Sistema detenido hasta nueva orden.")
+                self._speak("Servicio detenido hasta que me llame por mi nombre, señor.")
                 return
             self._handle_turn(command, history)
 
-    def _run_button_shutdown_confirmation(self) -> None:
-        self._speak("¿Está seguro de que quiere apagarme señor?")
-        confirmation = self._listen_for_sentence()
-        if intents.is_confirmation(confirmation):
-            self._speak("Apagado manual accionado, apagado de los sistemas iniciado.")
-            self._power_controller.shutdown()
-        else:
-            self._speak("Apagado cancelado, señor.")
-
     def _handle_power_command(self, command_text: str) -> bool | None:
         if intents.wants_to_shutdown(command_text):
-            return self._confirm_and_run("¿Está seguro de que quiere apagarme señor?", "Venga a tomar por culo. Tirando del cable... Chao!.", "Apagado cancelado, señor.", self._power_controller.shutdown)
+            return self._confirm_and_run("¿Está seguro de que quiere apagar la Raspberry, señor?", "De acuerdo, señor. Apagando la Raspberry.", "Apagado cancelado, señor.", self._power_controller.shutdown)
         if intents.wants_to_reboot(command_text):
-            return self._confirm_and_run("¿Está seguro de que quiere reiniciarme señor?", "Okey reiniciando el sistema, ahora te hablo!.", "Reinicio cancelado, señor.", self._power_controller.reboot)
+            return self._confirm_and_run("¿Está seguro de que quiere reiniciar la Raspberry, señor?", "De acuerdo, señor. Reiniciando la Raspberry.", "Reinicio cancelado, señor.", self._power_controller.reboot)
         return None
 
     def _confirm_and_run(self, question: str, confirmed_reply: str, cancelled_reply: str, action) -> bool:

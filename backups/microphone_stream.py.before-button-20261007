@@ -97,10 +97,10 @@ class MicrophoneStream:
         self._capture_enabled.clear()
         self.clear()
 
-    def read_chunk(self, timeout: float | None = None) -> bytes:
+    def read_chunk(self) -> bytes:
         """Bloquea hasta que haya un fragmento de audio disponible."""
 
-        return self._queue.get(timeout=timeout)
+        return self._queue.get()
 
     def __enter__(self) -> "MicrophoneStream":
         self._stream.__enter__()

@@ -16,6 +16,7 @@ const byte PIN_ALERT_LIGHT = 12;
 
 const byte PIN_ULTRASONIC_TRIG = 7;
 const byte PIN_ULTRASONIC_ECHO = 8;
+const byte PIN_SHUTDOWN_BUTTON = 2;
 
 enum LedMode { RED, GREEN, BREATHING_BLUE, BLINKING_YELLOW, OFF };
 
@@ -24,6 +25,10 @@ bool isAlertLightActive = false;
 unsigned long breathingCycleStartedAt = 0;
 unsigned long yellowBlinkStartedAt = 0;
 unsigned long alertBlinkStartedAt = 0;
+bool shutdownButtonLatched = false;
+bool lastButtonReading = HIGH;
+unsigned long buttonChangedAt = 0;
+const unsigned long BUTTON_DEBOUNCE_MS = 40;
 
 const unsigned long BREATHING_HALF_CYCLE_MS = 1000;
 const unsigned long YELLOW_BLINK_INTERVAL_MS = 125;
@@ -101,6 +106,17 @@ void updateAlertBlink() {
 
 // Devuelve la distancia en centímetros.
 // Devuelve -1 si no se recibe el pulso de eco.
+void updateShutdownButton() {
+  bool reading = digitalRead(PIN_SHUTDOWN_BUTTON);
+  if (reading != lastButtonReading) {
+    buttonChangedAt = millis();
+    lastButtonReading = reading;
+  }
+  if (millis() - buttonChangedAt >= BUTTON_DEBOUNCE_MS && reading == LOW) {
+    shutdownButtonLatched = true;
+  }
+}
+
 float readUltrasonicDistanceCm() {
   digitalWrite(PIN_ULTRASONIC_TRIG, LOW);
   delayMicroseconds(2);
@@ -125,6 +141,7 @@ void setup() {
 
   pinMode(PIN_ULTRASONIC_TRIG, OUTPUT);
   pinMode(PIN_ULTRASONIC_ECHO, INPUT);
+  pinMode(PIN_SHUTDOWN_BUTTON, INPUT_PULLUP);
   digitalWrite(PIN_ULTRASONIC_TRIG, LOW);
 
   Serial.begin(115200);
@@ -139,6 +156,7 @@ void loop() {
   updateBreathingAnimation();
   updateYellowBlink();
   updateAlertBlink();
+  updateShutdownButton();
 
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n');
