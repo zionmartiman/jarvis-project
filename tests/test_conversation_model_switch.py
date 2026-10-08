@@ -2,8 +2,11 @@ import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 import threading
+import tempfile
+from pathlib import Path
 
 from core.conversation import ConversationOrchestrator
+from core.memory import ConversationMemory, JsonlMemoryBackend
 
 
 class FakeMicrophone:
@@ -61,6 +64,16 @@ class FakeBridge:
         self.response = response
 
     def ask(self, message: str, history: list[dict]) -> str:
+        return self.response
+
+
+class RecordingBridge(FakeBridge):
+    def __init__(self) -> None:
+        super().__init__()
+        self.received_history: list[dict] = []
+
+    def ask(self, message: str, history: list[dict]) -> str:
+        self.received_history = list(history)
         return self.response
 
 
@@ -162,6 +175,35 @@ class ConversationModelSwitchTest(unittest.TestCase):
                 "Yo: buenas noches",
             ],
         )
+
+    def test_gemini_receives_persisted_context_and_exchange_is_saved(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            memory = ConversationMemory(
+                JsonlMemoryBackend(Path(directory) / "conversation.jsonl"),
+                summarizer=None,
+            )
+            memory.record_exchange("¿Cómo me llamo?", "Aún no me lo has dicho.")
+            bridge = RecordingBridge()
+            orchestrator = ConversationOrchestrator(
+                microphone=FakeMicrophone(),
+                recognizer=FakeRecognizer(),
+                synthesizer=FakeSynthesizer(),
+                bridge_factory=lambda model: bridge,
+                power_controller=FakePowerController(),
+                status_indicator=FakeStatusIndicator(),
+                max_history_items=10,
+                conversation_memory=memory,
+            )
+            orchestrator._active_model = "gemini"
+            orchestrator._bridge = bridge
+
+            orchestrator._handle_turn("Me llamo Ana", [])
+
+            self.assertEqual(bridge.received_history[0]["text"], "¿Cómo me llamo?")
+            self.assertEqual(bridge.received_history[-1]["text"], "Aún no me lo has dicho.")
+            self.assertEqual(bridge.received_history[-1]["role"], "assistant")
+            self.assertEqual(memory.get_context()[-2]["text"], "Me llamo Ana")
+            self.assertEqual(memory.get_context()[-1]["text"], "respuesta")
 
     def test_interrupt_button_aborts_wait_for_each_model(self) -> None:
         for model in ("gemini", "vento"):

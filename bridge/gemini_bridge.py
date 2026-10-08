@@ -16,11 +16,11 @@ class GeminiBridge(AssistantBridge):
     """Sends text to Google Gemini without a Python SDK dependency."""
 
     def __init__(self, credentials: GeminiCredentials, history_limit: int, timeout_seconds: int = 130,
-                 system_prompt_path: str | Path | None = None):
+                 system_prompt_path: str | Path | None = None, include_system_prompt: bool = True):
         self._credentials = credentials
         self._history_limit = history_limit
         self._timeout_seconds = timeout_seconds
-        self._system_prompt = self._load_system_prompt(system_prompt_path)
+        self._system_prompt = self._load_system_prompt(system_prompt_path) if include_system_prompt else ""
 
     @staticmethod
     def _load_system_prompt(system_prompt_path: str | Path | None) -> str:
@@ -31,14 +31,19 @@ class GeminiBridge(AssistantBridge):
         return prompt_path.read_text(encoding="utf-8").strip()
 
     def build_request_payload(self, message: str, history: list[dict]) -> dict:
+        summaries = [str(item.get("text", "")) for item in history if item.get("role") == "summary" and item.get("text")]
+        messages = [item for item in history if item.get("role") != "summary"]
         contents = [{"role": "model" if item.get("role") == "assistant" else "user",
                      "parts": [{"text": str(item.get("text", ""))}]}
-                    for item in history[-self._history_limit:] if item.get("text")]
+                    for item in messages[-self._history_limit:] if item.get("text")]
         contents.append({"role": "user", "parts": [{"text": message}]})
 
         payload: dict = {"contents": contents, "generationConfig": {"temperature": 0.7}}
-        if self._system_prompt:
-            payload["systemInstruction"] = {"parts": [{"text": self._system_prompt}]}
+        instructions = [self._system_prompt] if self._system_prompt else []
+        if summaries:
+            instructions.append("Memoria a largo plazo del usuario: " + summaries[-1])
+        if instructions:
+            payload["systemInstruction"] = {"parts": [{"text": "\n\n".join(instructions)}]}
         return payload
 
     def ask(self, message: str, history: list[dict]) -> str:

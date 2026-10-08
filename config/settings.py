@@ -30,6 +30,13 @@ AZURE_VOICE = "es-ES-AlvaroNeural"
 
 # Conservamos los últimos tres intercambios completos (usuario + Jarvis).
 MAX_HISTORY_ITEMS = 6
+GEMINI_MEMORY_CONTEXT_ITEMS = 11
+CONVERSATION_MEMORY_PATH = BASE_DIR / "state" / "conversation.jsonl"
+CONVERSATION_MEMORY_MAX_BYTES = 4096
+CONVERSATION_MEMORY_COMPACT_RECORDS = 10
+CONVERSATION_MEMORY_RECENT_INTERACTIONS = 5
+GEMINI_SUMMARY_MODEL = "gemini-3.5-flash-lite"
+GEMINI_SUMMARY_TIMEOUT_SECONDS = 30
 
 # Arduino Mega conectado por USB para las luces físicas.
 ARDUINO_SERIAL_PORT = "/dev/ttyACM0"

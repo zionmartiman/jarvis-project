@@ -10,13 +10,14 @@ from typing import TYPE_CHECKING
 
 from core import intents
 from core.interfaces import AssistantBridge, AssistantStatus, SpeechRecognizer, SpeechSynthesizer, StatusIndicator, SystemController
+from core.memory import ConversationMemory
 
 if TYPE_CHECKING:
     from audio.microphone_stream import MicrophoneStream
 
 
 class ConversationOrchestrator:
-    def __init__(self, microphone: MicrophoneStream, recognizer: SpeechRecognizer, synthesizer: SpeechSynthesizer, bridge_factory: Callable[[str], AssistantBridge], power_controller: SystemController, status_indicator: StatusIndicator, max_history_items: int, shutdown_button_event: threading.Event | None = None, response_interrupt_event: threading.Event | None = None):
+    def __init__(self, microphone: MicrophoneStream, recognizer: SpeechRecognizer, synthesizer: SpeechSynthesizer, bridge_factory: Callable[[str], AssistantBridge], power_controller: SystemController, status_indicator: StatusIndicator, max_history_items: int, shutdown_button_event: threading.Event | None = None, response_interrupt_event: threading.Event | None = None, conversation_memory: ConversationMemory | None = None):
         self._microphone = microphone
         self._recognizer = recognizer
         self._synthesizer = synthesizer
@@ -26,6 +27,7 @@ class ConversationOrchestrator:
         self._power_controller = power_controller
         self._status_indicator = status_indicator
         self._max_history_items = max_history_items
+        self._conversation_memory = conversation_memory
         self._shutdown_button_event = shutdown_button_event or threading.Event()
         self._response_interrupt_event = response_interrupt_event or threading.Event()
         self._shutdown_started = threading.Event()
@@ -170,7 +172,10 @@ class ConversationOrchestrator:
             self._model_reply_interrupted.clear()
             self._model_reply_active.set()
             try:
-                reply = self._ask_model_interruptibly(self._bridge, command, history)
+                model_history = history
+                if self._active_model == "gemini" and self._conversation_memory is not None:
+                    model_history = self._conversation_memory.get_context()
+                reply = self._ask_model_interruptibly(self._bridge, command, model_history)
                 if reply is None:
                     if self._model_reply_interrupted.is_set() and not self._shutdown_started.is_set():
                         self._model_reply_active.clear()
@@ -189,6 +194,8 @@ class ConversationOrchestrator:
                 history.extend([{"role": "user", "text": command}, {"role": "assistant", "text": reply}])
                 if len(history) > self._max_history_items:
                     del history[:-self._max_history_items]
+                if self._conversation_memory is not None:
+                    self._conversation_memory.record_exchange(command, reply)
                 was_interrupted = self._speak_model_reply(reply)
                 if was_interrupted and not self._shutdown_started.is_set():
                     self._model_reply_active.clear()

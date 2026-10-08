@@ -15,6 +15,7 @@ from Sensors.rainwater_tank_meter import RainwaterTankLevel, RainwaterTankMeter
 from Sensors.rainwater_tank_web_server import RainwaterTankWebServer
 from core.conversation import ConversationOrchestrator
 from core.interfaces import AssistantBridge
+from core.memory import ConversationMemory, JsonlMemoryBackend
 from speech.azure_synthesizer import AzureSpeechSynthesizer
 from speech.vosk_recognizer import VoskSpeechRecognizer
 from system.power_control import RaspberryPowerController
@@ -36,7 +37,7 @@ def build_bridge(model: str) -> AssistantBridge:
     """Create only the bridge selected by the spoken startup choice."""
     system_prompt_path = Path(__file__).resolve().parent / "system.md"
     if model == "gemini":
-        return GeminiBridge(settings.load_gemini_credentials(), settings.MAX_HISTORY_ITEMS,
+        return GeminiBridge(settings.load_gemini_credentials(), settings.GEMINI_MEMORY_CONTEXT_ITEMS,
                            system_prompt_path=system_prompt_path)
     if model == "vento":
         return VentoBridge(settings.load_bridge_credentials(), settings.MAX_HISTORY_ITEMS)
@@ -61,7 +62,24 @@ def build_orchestrator() -> tuple[ConversationOrchestrator, MicrophoneStream, Ar
     rainwater_tank_meter.start_polling()
     rainwater_tank_web_server = RainwaterTankWebServer(latest_level=rainwater_tank_meter.latest_level)
     rainwater_tank_web_server.start()
-    orchestrator = ConversationOrchestrator(microphone=microphone, recognizer=recognizer, synthesizer=synthesizer, bridge_factory=build_bridge, power_controller=power_controller, status_indicator=status_indicator, max_history_items=settings.MAX_HISTORY_ITEMS, shutdown_button_event=shutdown_button_event, response_interrupt_event=response_interrupt_event)
+    def summarize_memory(prompt: str) -> str:
+        credentials = settings.load_gemini_credentials()
+        summarizer = GeminiBridge(
+            settings.GeminiCredentials(credentials.api_key, settings.GEMINI_SUMMARY_MODEL),
+            history_limit=1,
+            timeout_seconds=settings.GEMINI_SUMMARY_TIMEOUT_SECONDS,
+            include_system_prompt=False,
+        )
+        return summarizer.ask(prompt, [])
+
+    conversation_memory = ConversationMemory(
+        JsonlMemoryBackend(settings.CONVERSATION_MEMORY_PATH),
+        summarizer=summarize_memory,
+        max_size_bytes=settings.CONVERSATION_MEMORY_MAX_BYTES,
+        compact_after_records=settings.CONVERSATION_MEMORY_COMPACT_RECORDS,
+        recent_interactions=settings.CONVERSATION_MEMORY_RECENT_INTERACTIONS,
+    )
+    orchestrator = ConversationOrchestrator(microphone=microphone, recognizer=recognizer, synthesizer=synthesizer, bridge_factory=build_bridge, power_controller=power_controller, status_indicator=status_indicator, max_history_items=settings.MAX_HISTORY_ITEMS, shutdown_button_event=shutdown_button_event, response_interrupt_event=response_interrupt_event, conversation_memory=conversation_memory)
     return orchestrator, microphone, status_indicator, rainwater_tank_meter, rainwater_tank_web_server, button_monitor
 
 
