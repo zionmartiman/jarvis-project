@@ -44,7 +44,7 @@ class RainwaterTankMeter:
         on_fill_level_status_changed: (
             Callable[[RainwaterTankLevel, str], None] | None
         ) = None,
-        poll_interval_seconds: float = 0.5,
+        poll_interval_seconds: float = 5.0,
     ) -> None:
         self._arduino = arduino
         self._state_path = state_path

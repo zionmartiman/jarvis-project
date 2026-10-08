@@ -55,7 +55,7 @@ def build_orchestrator() -> tuple[ConversationOrchestrator, MicrophoneStream, Ar
     shutdown_button_event = threading.Event()
     response_interrupt_event = threading.Event()
     button_monitor = ArduinoButtonMonitor(arduino=arduino, on_shutdown_pressed=shutdown_button_event.set, on_response_interrupt_pressed=response_interrupt_event.set)
-    rainwater_tank_meter = RainwaterTankMeter(arduino=arduino, state_path=settings.RAINWATER_TANK_STATE_PATH, on_fill_level_changed=announce_rainwater_tank_level, on_fill_level_status_changed=announce_rainwater_tank_status)
+    rainwater_tank_meter = RainwaterTankMeter(arduino=arduino, state_path=settings.RAINWATER_TANK_STATE_PATH, on_fill_level_changed=announce_rainwater_tank_level, on_fill_level_status_changed=announce_rainwater_tank_status, poll_interval_seconds=settings.RAINWATER_TANK_POLL_INTERVAL_SECONDS)
     status_indicator.start_control_receiver()
     button_monitor.start()
     rainwater_tank_meter.start_polling()

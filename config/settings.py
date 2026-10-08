@@ -47,6 +47,7 @@ MAX_ANNOUNCEMENT_DATAGRAM_BYTES = 2048
 
 # Queryable rainwater tank state, updated by RainwaterTankMeter.
 RAINWATER_TANK_STATE_PATH = BASE_DIR / "state" / "rainwater_tank_state.json"
+RAINWATER_TANK_POLL_INTERVAL_SECONDS = 5.0
 
 
 @dataclass(frozen=True)

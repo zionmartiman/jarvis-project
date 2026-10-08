@@ -102,7 +102,7 @@ La solicitud de apagado del sistema depende de que `sudo -n /usr/sbin/poweroff` 
 
 ### Lectura y cálculo
 
-El medidor Python pide al Arduino `SENSOR DISTANCE` cada **0,5 segundos**. El Arduino mide la distancia con el HC-SR04 y devuelve centímetros; el cálculo del porcentaje lo realiza Python, no Vento ni el navegador.
+El medidor Python pide al Arduino `SENSOR DISTANCE` cada **5 segundos**. El Arduino mide la distancia con el HC-SR04 y devuelve centímetros; el cálculo del porcentaje lo realiza Python, no Vento ni el navegador. Este sondeo mantiene actualizado el último nivel y permite detectar cambios y cruces de umbral para los avisos.
 
 Los valores de calibración actuales son 80 cm para depósito vacío y 9 cm para lleno. El porcentaje se calcula linealmente entre esos extremos, se redondea a entero y se limita al intervalo 0–100 %. Las mediciones no válidas se descartan. Las lecturas correctas se imprimen en consola y se escriben de forma atómica en `state/rainwater_tank_state.json`.
 
@@ -122,7 +122,7 @@ El callback envía texto a un socket Unix local mediante [notifications/announce
 
 El servidor HTTP se enlaza por defecto a `0.0.0.0:8765`, de modo que escucha en todas las interfaces de red. Expone el panel en `/` y el nivel actual en `/api/rainwater-tank/current-level`. Un dispositivo de la red puede abrir `http://<IP-de-la-Raspberry>:8765/`, sujeto a conectividad y reglas de red.
 
-El panel muestra el porcentaje, una representación visual del depósito, la distancia y una gráfica seleccionable entre 5 minutos y 24 horas. Consulta la API cada 500 ms. **El histórico de la gráfica se guarda en `localStorage` del navegador de cada dispositivo**, no en el servidor; se pierden sus muestras si se borra el almacenamiento local o se usa otro navegador.
+El panel muestra el porcentaje, una representación visual del depósito, la distancia y una gráfica seleccionable entre 5 minutos y 24 horas. Consulta la API cada 500 ms, pero esa consulta solo obtiene el último nivel en memoria; no provoca una lectura nueva del sensor. Los datos del sensor se actualizan cada 5 segundos. **El histórico de la gráfica se guarda en `localStorage` del navegador de cada dispositivo**, no en el servidor; se pierden sus muestras si se borra el almacenamiento local o se usa otro navegador.
 
 El contador de litros no proviene de un caudalímetro ni de un sensor de lluvia. Es una estimación de subida neta del nivel dentro del rango seleccionado, basada en una capacidad fija codificada de 1000 litros. Puede no representar litros reales si esa capacidad no coincide con el depósito; tampoco suma el agua que entra y vuelve a salir durante el rango.
 
