@@ -38,6 +38,8 @@ _END_CONVERSATION_COMMANDS = {
     "descansa",
 }
 
+_CHANGE_MODEL_COMMANDS = {"cambiar de modelo"}
+
 _CONFIRMATION_COMMANDS = {
     "si",
     "dale",
@@ -85,6 +87,11 @@ def wants_to_end_conversation(text: str) -> bool:
     al modo de espera. El programa continúa ejecutándose.
     """
     return normalize_text(text) in _END_CONVERSATION_COMMANDS
+
+
+def wants_to_change_model(text: str) -> bool:
+    """Detecta la orden hablada para alternar entre los modelos de IA."""
+    return normalize_text(text) in _CHANGE_MODEL_COMMANDS
 
 
 def is_confirmation(text: str) -> bool:

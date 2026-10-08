@@ -5,10 +5,13 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 import threading
+from typing import TYPE_CHECKING
 
-from audio.microphone_stream import MicrophoneStream
 from core import intents
 from core.interfaces import AssistantBridge, AssistantStatus, SpeechRecognizer, SpeechSynthesizer, StatusIndicator, SystemController
+
+if TYPE_CHECKING:
+    from audio.microphone_stream import MicrophoneStream
 
 
 class ConversationOrchestrator:
@@ -18,6 +21,7 @@ class ConversationOrchestrator:
         self._synthesizer = synthesizer
         self._bridge_factory = bridge_factory
         self._bridge: AssistantBridge | None = None
+        self._active_model: str | None = None
         self._power_controller = power_controller
         self._status_indicator = status_indicator
         self._max_history_items = max_history_items
@@ -39,8 +43,8 @@ class ConversationOrchestrator:
             name="response-interrupt-button-watcher",
             daemon=True,
         ).start()
-        self._speak("Sistemas listos. Que modelo usamos señor?")
-        self._choose_assistant()
+        self._speak("Sistemas listos.")
+        self._initialize_assistant()
         while True:
             self._set_status(AssistantStatus.WAITING)
             print("Esperando la palabra «Jarvis»...", flush=True)
@@ -51,23 +55,13 @@ class ConversationOrchestrator:
                 print(f"Error iniciando la conversación: {error}", file=sys.stderr, flush=True)
                 self._microphone.clear()
 
-    def _choose_assistant(self) -> None:
-        choices = {"google": ("gemini", "Gemini"), "el primero": ("gemini", "Gemini"), "vento": ("vento", "Vento"), "el lento": ("vento", "Vento")}
-        while self._bridge is None:
-            choice = self._listen_for_sentence().strip().lower()
-            selected = choices.get(choice)
-            if selected is None:
-                self._speak("No me entero. Usamos gemini o vento?")
-                continue
-            model, name = selected
-            try:
-                self._bridge = self._bridge_factory(model)
-            except Exception as error:
-                print(f"Error preparando {name}: {error}", file=sys.stderr, flush=True)
-                self._speak(f"No puedo preparar {name}.")
-                continue
-            self._speak(f"{name} preparado.")
-            self._microphone.clear()
+    def _initialize_assistant(self) -> None:
+        self._active_model = "gemini"
+        try:
+            self._bridge = self._bridge_factory(self._active_model)
+        except Exception as error:
+            print(f"Error preparando Gemini: {error}", file=sys.stderr, flush=True)
+            self._speak("No puedo preparar Gemini.")
 
     def _run_conversation(self) -> None:
         history: list[dict] = []
@@ -79,10 +73,28 @@ class ConversationOrchestrator:
                 return
             if power_result is False:
                 continue
+            if intents.wants_to_change_model(command):
+                self._switch_model()
+                continue
             if intents.wants_to_end_conversation(command):
                 self._speak("Sistema detenido hasta nueva orden.")
                 return
             self._handle_turn(command, history)
+
+    def _switch_model(self) -> None:
+        model = "vento" if self._active_model == "gemini" else "gemini"
+        name = "Vento" if model == "vento" else "Gemini"
+        try:
+            bridge = self._bridge_factory(model)
+        except Exception as error:
+            print(f"Error preparando {name}: {error}", file=sys.stderr, flush=True)
+            self._speak(f"No puedo preparar {name}.")
+            return
+        self._bridge = bridge
+        self._active_model = model
+        reply = "Cambiando a Vento." if model == "vento" else "Cambiar a Gemini."
+        self._speak(reply)
+        self._microphone.clear()
 
     def _run_button_shutdown(self) -> None:
         if self._shutdown_started.is_set():
