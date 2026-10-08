@@ -1,4 +1,6 @@
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 
 from core.conversation import ConversationOrchestrator
 
@@ -36,8 +38,11 @@ class FakeSynthesizer:
 
 
 class FakeBridge:
+    def __init__(self, response: str = "respuesta") -> None:
+        self.response = response
+
     def ask(self, message: str, history: list[dict]) -> str:
-        return "respuesta"
+        return self.response
 
 
 class FakeStatusIndicator:
@@ -102,6 +107,31 @@ class ConversationModelSwitchTest(unittest.TestCase):
                 self.assertEqual(created_models, [expected_model])
                 self.assertEqual(orchestrator._active_model, expected_model)
                 self.assertIn(expected_reply, synthesizer.spoken)
+
+    def test_logs_user_and_active_model_in_dialogue_order(self) -> None:
+        output = StringIO()
+        orchestrator = self.create_orchestrator(
+            FakeRecognizer(["Hola", "cambiar de modelo", "Prueba con Vento", "buenas noches"]),
+            FakeSynthesizer(),
+            lambda model: FakeBridge(f"respuesta de {model}"),
+        )
+        orchestrator._active_model = "gemini"
+        orchestrator._bridge = FakeBridge("respuesta de gemini")
+
+        with redirect_stdout(output):
+            orchestrator._run_conversation()
+
+        self.assertEqual(
+            output.getvalue().splitlines(),
+            [
+                "Yo: Hola",
+                "Gemini: respuesta de gemini",
+                "Yo: cambiar de modelo",
+                "Yo: Prueba con Vento",
+                "Vento: respuesta de vento",
+                "Yo: buenas noches",
+            ],
+        )
 
 
 if __name__ == "__main__":

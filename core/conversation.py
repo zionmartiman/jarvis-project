@@ -164,6 +164,8 @@ class ConversationOrchestrator:
             if self._bridge is None:
                 raise RuntimeError("No hay un modelo de IA seleccionado")
             reply = self._bridge.ask(command, history)
+            assistant_name = "Gemini" if self._active_model == "gemini" else "Vento"
+            print(f"{assistant_name}: {reply}", flush=True)
             history.extend([{"role": "user", "text": command}, {"role": "assistant", "text": reply}])
             if len(history) > self._max_history_items:
                 del history[:-self._max_history_items]
@@ -189,7 +191,9 @@ class ConversationOrchestrator:
 
     def _listen_for_sentence(self) -> str:
         self._set_status(AssistantStatus.LISTENING)
-        return self._recognizer.listen_for_sentence()
+        sentence = self._recognizer.listen_for_sentence()
+        print(f"Yo: {sentence}", flush=True)
+        return sentence
 
     def _set_status(self, status: AssistantStatus) -> None:
         try:
