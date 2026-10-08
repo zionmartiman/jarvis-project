@@ -1,6 +1,7 @@
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
+import threading
 
 from core.conversation import ConversationOrchestrator
 
@@ -29,12 +30,30 @@ class FakeRecognizer:
 class FakeSynthesizer:
     def __init__(self) -> None:
         self.spoken: list[str] = []
+        self.interruptions = 0
 
     def speak(self, text: str) -> None:
         self.spoken.append(text)
 
     def interrupt(self) -> None:
-        pass
+        self.interruptions += 1
+
+
+class InterruptibleSynthesizer(FakeSynthesizer):
+    def __init__(self) -> None:
+        super().__init__()
+        self.reply_started = threading.Event()
+        self.interrupted = threading.Event()
+
+    def speak(self, text: str) -> None:
+        super().speak(text)
+        if text == "respuesta":
+            self.reply_started.set()
+            self.interrupted.wait(timeout=5)
+
+    def interrupt(self) -> None:
+        super().interrupt()
+        self.interrupted.set()
 
 
 class FakeBridge:
@@ -43,6 +62,17 @@ class FakeBridge:
 
     def ask(self, message: str, history: list[dict]) -> str:
         return self.response
+
+
+class BlockingBridge:
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.release = threading.Event()
+
+    def ask(self, message: str, history: list[dict]) -> str:
+        self.started.set()
+        self.release.wait(timeout=5)
+        return "respuesta tardía"
 
 
 class FakeStatusIndicator:
@@ -132,6 +162,92 @@ class ConversationModelSwitchTest(unittest.TestCase):
                 "Yo: buenas noches",
             ],
         )
+
+    def test_interrupt_button_aborts_wait_for_each_model(self) -> None:
+        for model in ("gemini", "vento"):
+            with self.subTest(model=model):
+                interrupt_event = threading.Event()
+                bridge = BlockingBridge()
+                synthesizer = FakeSynthesizer()
+                orchestrator = ConversationOrchestrator(
+                    microphone=FakeMicrophone(),
+                    recognizer=FakeRecognizer(),
+                    synthesizer=synthesizer,
+                    bridge_factory=lambda selected: FakeBridge(),
+                    power_controller=FakePowerController(),
+                    status_indicator=FakeStatusIndicator(),
+                    max_history_items=10,
+                    response_interrupt_event=interrupt_event,
+                )
+                orchestrator._active_model = model
+                orchestrator._bridge = bridge
+                watcher = threading.Thread(
+                    target=orchestrator._watch_response_interrupt_button,
+                    daemon=True,
+                )
+                turn = threading.Thread(
+                    target=orchestrator._handle_turn,
+                    args=("Hola", []),
+                    daemon=True,
+                )
+                watcher.start()
+                turn.start()
+
+                try:
+                    self.assertTrue(bridge.started.wait(timeout=1))
+                    interrupt_event.set()
+                    turn.join(timeout=1)
+
+                    self.assertFalse(turn.is_alive())
+                    self.assertEqual(synthesizer.spoken, ["¿Sí?"])
+                    self.assertEqual(synthesizer.interruptions, 0)
+                finally:
+                    bridge.release.set()
+                    orchestrator._shutdown_started.set()
+                    interrupt_event.set()
+                    watcher.join(timeout=1)
+                    turn.join(timeout=1)
+
+    def test_interrupt_button_stops_spoken_reply_and_says_si(self) -> None:
+        interrupt_event = threading.Event()
+        synthesizer = InterruptibleSynthesizer()
+        orchestrator = ConversationOrchestrator(
+            microphone=FakeMicrophone(),
+            recognizer=FakeRecognizer(),
+            synthesizer=synthesizer,
+            bridge_factory=lambda model: FakeBridge(),
+            power_controller=FakePowerController(),
+            status_indicator=FakeStatusIndicator(),
+            max_history_items=10,
+            response_interrupt_event=interrupt_event,
+        )
+        orchestrator._active_model = "gemini"
+        orchestrator._bridge = FakeBridge("respuesta")
+        watcher = threading.Thread(
+            target=orchestrator._watch_response_interrupt_button,
+            daemon=True,
+        )
+        turn = threading.Thread(
+            target=orchestrator._handle_turn,
+            args=("Hola", []),
+            daemon=True,
+        )
+        watcher.start()
+        turn.start()
+
+        try:
+            self.assertTrue(synthesizer.reply_started.wait(timeout=1))
+            interrupt_event.set()
+            turn.join(timeout=1)
+
+            self.assertFalse(turn.is_alive())
+            self.assertEqual(synthesizer.spoken, ["respuesta", "¿Sí?"])
+            self.assertEqual(synthesizer.interruptions, 1)
+        finally:
+            orchestrator._shutdown_started.set()
+            interrupt_event.set()
+            watcher.join(timeout=1)
+            turn.join(timeout=1)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable
+from queue import Empty, Queue
 import threading
 from typing import TYPE_CHECKING
 
@@ -29,6 +30,7 @@ class ConversationOrchestrator:
         self._response_interrupt_event = response_interrupt_event or threading.Event()
         self._shutdown_started = threading.Event()
         self._model_reply_active = threading.Event()
+        self._model_reply_speaking = threading.Event()
         self._model_reply_interrupted = threading.Event()
         self._speech_lock = threading.Lock()
 
@@ -136,6 +138,8 @@ class ConversationOrchestrator:
             if not self._model_reply_active.is_set():
                 continue
             self._model_reply_interrupted.set()
+            if not self._model_reply_speaking.is_set():
+                continue
             try:
                 self._synthesizer.interrupt()
             except Exception as error:
@@ -163,31 +167,88 @@ class ConversationOrchestrator:
             self._set_status(AssistantStatus.PROCESSING)
             if self._bridge is None:
                 raise RuntimeError("No hay un modelo de IA seleccionado")
-            reply = self._bridge.ask(command, history)
-            assistant_name = "Gemini" if self._active_model == "gemini" else "Vento"
-            print(f"{assistant_name}: {reply}", flush=True)
-            history.extend([{"role": "user", "text": command}, {"role": "assistant", "text": reply}])
-            if len(history) > self._max_history_items:
-                del history[:-self._max_history_items]
-            self._speak_model_reply(reply)
-            self._microphone.clear()
+            self._model_reply_interrupted.clear()
+            self._model_reply_active.set()
+            try:
+                reply = self._ask_model_interruptibly(self._bridge, command, history)
+                if reply is None:
+                    if self._model_reply_interrupted.is_set() and not self._shutdown_started.is_set():
+                        self._model_reply_active.clear()
+                        self._model_reply_interrupted.clear()
+                        self._speak("¿Sí?")
+                        self._microphone.clear()
+                    return
+                if self._model_reply_interrupted.is_set():
+                    self._model_reply_active.clear()
+                    self._model_reply_interrupted.clear()
+                    self._speak("¿Sí?")
+                    self._microphone.clear()
+                    return
+                assistant_name = "Gemini" if self._active_model == "gemini" else "Vento"
+                print(f"{assistant_name}: {reply}", flush=True)
+                history.extend([{"role": "user", "text": command}, {"role": "assistant", "text": reply}])
+                if len(history) > self._max_history_items:
+                    del history[:-self._max_history_items]
+                was_interrupted = self._speak_model_reply(reply)
+                if was_interrupted and not self._shutdown_started.is_set():
+                    self._model_reply_active.clear()
+                    self._model_reply_interrupted.clear()
+                    self._speak("¿Sí?")
+                self._microphone.clear()
+            finally:
+                self._model_reply_active.clear()
+                self._model_reply_speaking.clear()
+                self._model_reply_interrupted.clear()
         except Exception as error:
             print(f"Error procesando el mensaje: {error}", file=sys.stderr, flush=True)
             self._speak("Lo siento, he tenido un problema al procesar la petición. Puede repetirla.")
             self._microphone.clear()
 
-    def _speak_model_reply(self, reply: str) -> None:
-        self._model_reply_interrupted.clear()
-        self._model_reply_active.set()
+    def _ask_model_interruptibly(
+        self,
+        bridge: AssistantBridge,
+        command: str,
+        history: list[dict],
+    ) -> str | None:
+        result_queue: Queue[tuple[str | None, Exception | None]] = Queue(maxsize=1)
+
+        def ask() -> None:
+            try:
+                result_queue.put((bridge.ask(command, history), None))
+            except Exception as error:
+                result_queue.put((None, error))
+
+        threading.Thread(
+            target=ask,
+            name="assistant-model-request",
+            daemon=True,
+        ).start()
+
+        while not self._shutdown_started.is_set():
+            if self._model_reply_interrupted.is_set():
+                return None
+            try:
+                reply, error = result_queue.get(timeout=0.05)
+            except Empty:
+                continue
+            if self._model_reply_interrupted.is_set() or self._shutdown_started.is_set():
+                return None
+            if error is not None:
+                raise error
+            return reply
+        return None
+
+    def _speak_model_reply(self, reply: str) -> bool:
+        if self._model_reply_interrupted.is_set():
+            return True
+        self._model_reply_speaking.set()
         try:
+            if self._model_reply_interrupted.is_set():
+                return True
             self._speak(reply)
         finally:
-            self._model_reply_active.clear()
-
-        was_interrupted = self._model_reply_interrupted.is_set()
-        self._model_reply_interrupted.clear()
-        if was_interrupted and not self._shutdown_started.is_set():
-            self._speak("Sí, dime")
+            self._model_reply_speaking.clear()
+        return self._model_reply_interrupted.is_set()
 
     def _listen_for_sentence(self) -> str:
         self._set_status(AssistantStatus.LISTENING)
