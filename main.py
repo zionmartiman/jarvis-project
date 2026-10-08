@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Composition root for Jarvis Voice."""
 
+from pathlib import Path
 import threading
 
 from Arduino.arduino_mega_connection import ArduinoMegaConnection
@@ -33,8 +34,10 @@ def announce_rainwater_tank_status(level: RainwaterTankLevel, status: str) -> No
 
 def build_bridge(model: str) -> AssistantBridge:
     """Create only the bridge selected by the spoken startup choice."""
+    system_prompt_path = Path(__file__).resolve().parent / "system.md"
     if model == "gemini":
-        return GeminiBridge(settings.load_gemini_credentials(), settings.MAX_HISTORY_ITEMS)
+        return GeminiBridge(settings.load_gemini_credentials(), settings.MAX_HISTORY_ITEMS,
+                           system_prompt_path=system_prompt_path)
     if model == "vento":
         return VentoBridge(settings.load_bridge_credentials(), settings.MAX_HISTORY_ITEMS)
     raise ValueError(f"Modelo no admitido: {model}")

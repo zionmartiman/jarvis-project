@@ -10,6 +10,14 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def get_runtime_uid() -> int:
+    """Return the current uid on Unix and a safe fallback for other hosts."""
+    if hasattr(os, "getuid"):
+        return int(os.getuid())
+    return 1000
+
+
 SAMPLE_RATE = 16000
 INPUT_DEVICE = 1
 OUTPUT_DEVICE = "plughw:0,0"
@@ -27,12 +35,12 @@ MAX_HISTORY_ITEMS = 6
 ARDUINO_SERIAL_PORT = "/dev/ttyACM0"
 ARDUINO_BAUDRATE = 115200
 ARDUINO_CONTROL_SOCKET_PATH = (
-    Path("/run/user") / str(os.getuid()) / "jarvis-arduino-control.sock"
+    Path("/run/user") / str(get_runtime_uid()) / "jarvis-arduino-control.sock"
 )
 
 # Cola local del receptor independiente de avisos hablados.
 ANNOUNCEMENT_SOCKET_PATH = (
-    Path("/run/user") / str(os.getuid()) / "jarvis-announcer.sock"
+    Path("/run/user") / str(get_runtime_uid()) / "jarvis-announcer.sock"
 )
 MAX_ANNOUNCEMENT_CHARACTERS = 500
 MAX_ANNOUNCEMENT_DATAGRAM_BYTES = 2048
