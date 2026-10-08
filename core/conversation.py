@@ -100,7 +100,7 @@ class ConversationOrchestrator:
         try:
             self._synthesizer.interrupt()
             self._set_status(AssistantStatus.SPEAKING)
-            self._synthesizer.speak("Apagado manual accionado!, apagando sistemas.")
+            self._synthesizer.speak("Apagado manual accionado!, apagando sistemas. Venga, chao!")
         except Exception as error:
             print(f"Error reproduciendo el aviso de apagado: {error}", file=sys.stderr, flush=True)
         finally:
