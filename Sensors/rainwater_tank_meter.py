@@ -58,6 +58,7 @@ class RainwaterTankMeter:
         self._previous_fill_percentage: int | None = None
         self._announced_statuses: set[str] = set()
         self._has_observed_first_level = False
+        self._has_logged_first_level = False
         self._polling_thread: threading.Thread | None = None
         self._stop_polling = threading.Event()
 
@@ -132,11 +133,13 @@ class RainwaterTankMeter:
         with self._latest_level_lock:
             self._latest_level = level
         self._write_state_file(level)
-        print(
-            "Rainwater tank distance: "
-            f"{level.distance_cm:.1f} cm | fill level: {level.fill_percentage}%",
-            flush=True,
-        )
+        if not self._has_logged_first_level:
+            self._has_logged_first_level = True
+            print(
+                "Rainwater tank distance: "
+                f"{level.distance_cm:.1f} cm | fill level: {level.fill_percentage}%",
+                flush=True,
+            )
         self._notify(level)
 
     def _write_state_file(self, level: RainwaterTankLevel) -> None:
