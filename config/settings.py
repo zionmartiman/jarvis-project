@@ -35,8 +35,6 @@ CONVERSATION_MEMORY_PATH = BASE_DIR / "state" / "conversation.jsonl"
 CONVERSATION_MEMORY_MAX_BYTES = 4096
 CONVERSATION_MEMORY_COMPACT_RECORDS = 10
 CONVERSATION_MEMORY_RECENT_INTERACTIONS = 5
-GEMINI_SUMMARY_MODEL = "gemini-3.5-flash-lite"
-GEMINI_SUMMARY_TIMEOUT_SECONDS = 30
 
 # Arduino Mega conectado por USB para las luces físicas.
 ARDUINO_SERIAL_PORT = "/dev/ttyACM0"
@@ -85,10 +83,7 @@ def read_env_file(path: Path) -> dict[str, str]:
             continue
 
         key, value = line.split("=", 1)
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-            value = value[1:-1]
-        values[key.strip()] = value
+        values[key.strip()] = value.strip()
 
     return values
 
@@ -121,6 +116,7 @@ def load_bridge_credentials() -> BridgeCredentials:
 
 GEMINI_CONFIG_PATH = Path.home() / ".config" / "jarvis-voice" / "gemini.env"
 GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_TIMEOUT_SECONDS = 130
 
 
 @dataclass(frozen=True)

@@ -276,8 +276,8 @@ class ConversationMemory:
     def _run_background_compaction(self) -> None:
         try:
             self.compact()
-        except Exception:
-            _LOGGER.exception("No se pudo compactar la memoria; se conserva el historial original")
+        except Exception as error:
+            _LOGGER.warning("No se pudo compactar la memoria; se conserva el historial original: %s", error)
         finally:
             with self._lock:
                 self._compaction_running = False

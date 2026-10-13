@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 import tempfile
 import threading
@@ -82,6 +83,29 @@ class ConversationMemoryTest(unittest.TestCase):
         ])
         self.assertTrue(self.backend.backup_path.exists())
         self.assertEqual(len(self.backend.read_all()), 11)
+
+    def test_failed_background_compaction_keeps_history_without_traceback(self) -> None:
+        entries = [
+            MemoryEntry("2026-01-01T00:00:00+00:00", "user", f"pregunta {index}")
+            for index in range(4)
+        ]
+
+        def unavailable_summarizer(prompt: str) -> str:
+            raise RuntimeError("Gemini no está disponible (503)")
+
+        memory = ConversationMemory(
+            self.backend,
+            summarizer=unavailable_summarizer,
+            compact_after_records=1,
+            recent_interactions=1,
+        )
+        self.backend.replace_all(entries)
+        with self.assertLogs("core.memory", level=logging.WARNING) as captured:
+            memory._run_background_compaction()
+
+        self.assertEqual(self.backend.read_all(), entries)
+        self.assertIn("Gemini no está disponible (503)", captured.output[0])
+        self.assertNotIn("Traceback", captured.output[0])
 
     def test_automatic_compaction_is_scheduled_after_ten_records(self) -> None:
         summary_called = threading.Event()

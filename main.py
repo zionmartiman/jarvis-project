@@ -38,10 +38,22 @@ def build_bridge(model: str) -> AssistantBridge:
     system_prompt_path = Path(__file__).resolve().parent / "system.md"
     if model == "gemini":
         return GeminiBridge(settings.load_gemini_credentials(), settings.GEMINI_MEMORY_CONTEXT_ITEMS,
+                           timeout_seconds=settings.GEMINI_TIMEOUT_SECONDS,
                            system_prompt_path=system_prompt_path)
     if model == "vento":
         return VentoBridge(settings.load_bridge_credentials(), settings.MAX_HISTORY_ITEMS)
     raise ValueError(f"Modelo no admitido: {model}")
+
+
+def summarize_memory(prompt: str) -> str:
+    credentials = settings.load_gemini_credentials()
+    summarizer = GeminiBridge(
+        credentials,
+        history_limit=1,
+        timeout_seconds=settings.GEMINI_TIMEOUT_SECONDS,
+        include_system_prompt=False,
+    )
+    return summarizer.ask(prompt, [])
 
 
 def build_orchestrator() -> tuple[ConversationOrchestrator, MicrophoneStream, ArduinoRgbIndicator, RainwaterTankMeter, RainwaterTankWebServer, ArduinoButtonMonitor]:
@@ -62,16 +74,6 @@ def build_orchestrator() -> tuple[ConversationOrchestrator, MicrophoneStream, Ar
     rainwater_tank_meter.start_polling()
     rainwater_tank_web_server = RainwaterTankWebServer(latest_level=rainwater_tank_meter.latest_level)
     rainwater_tank_web_server.start()
-    def summarize_memory(prompt: str) -> str:
-        credentials = settings.load_gemini_credentials()
-        summarizer = GeminiBridge(
-            settings.GeminiCredentials(credentials.api_key, settings.GEMINI_SUMMARY_MODEL),
-            history_limit=1,
-            timeout_seconds=settings.GEMINI_SUMMARY_TIMEOUT_SECONDS,
-            include_system_prompt=False,
-        )
-        return summarizer.ask(prompt, [])
-
     conversation_memory = ConversationMemory(
         JsonlMemoryBackend(settings.CONVERSATION_MEMORY_PATH),
         summarizer=summarize_memory,
