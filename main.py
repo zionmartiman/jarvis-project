@@ -6,7 +6,7 @@ import threading
 
 from Arduino.arduino_mega_connection import ArduinoMegaConnection
 from audio.microphone_stream import MicrophoneStream
-from bridge.gemini_bridge import GeminiBridge
+from bridge.gemini_bridge import GeminiBridge, create_configured_gemini_bridge
 from bridge.vento_bridge import VentoBridge
 from config import settings
 from Indicators.arduino_rgb_indicator import ArduinoRgbIndicator
@@ -37,20 +37,19 @@ def build_bridge(model: str) -> AssistantBridge:
     """Create only the bridge selected by the spoken startup choice."""
     system_prompt_path = Path(__file__).resolve().parent / "system.md"
     if model == "gemini":
-        return GeminiBridge(settings.load_gemini_credentials(), settings.GEMINI_MEMORY_CONTEXT_ITEMS,
-                           timeout_seconds=settings.GEMINI_TIMEOUT_SECONDS,
-                           system_prompt_path=system_prompt_path)
+        return GeminiBridge(
+            settings.load_gemini_credentials(),
+            settings.GEMINI_MEMORY_CONTEXT_ITEMS,
+            system_prompt_path=system_prompt_path,
+        )
     if model == "vento":
         return VentoBridge(settings.load_bridge_credentials(), settings.MAX_HISTORY_ITEMS)
     raise ValueError(f"Modelo no admitido: {model}")
 
 
 def summarize_memory(prompt: str) -> str:
-    credentials = settings.load_gemini_credentials()
-    summarizer = GeminiBridge(
-        credentials,
+    summarizer = create_configured_gemini_bridge(
         history_limit=1,
-        timeout_seconds=settings.GEMINI_TIMEOUT_SECONDS,
         include_system_prompt=False,
     )
     return summarizer.ask(prompt, [])

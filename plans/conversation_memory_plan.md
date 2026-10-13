@@ -26,7 +26,7 @@ La persistencia local no requiere conexión. Si Gemini no está disponible duran
 ### Fase 3: síntesis y compactación
 
 - Al superar diez registros de mensajes o 4096 bytes, se separa el material antiguo de los últimos diez registros y se solicita una síntesis en español que priorice entidades, nombres, preferencias, decisiones y tareas pendientes.
-- El resumen se genera con `gemini-3.5-flash-lite`, modelo estable de bajo coste/alta velocidad según el catálogo consultado. La llamada se ejecuta en un hilo daemon para no bloquear la locución; no se inicia otra compactación en paralelo en la misma instancia.
+- El resumen usa el modelo configurado en `GEMINI_MODEL`, igual que la conversación por voz. Ambas rutas comparten la fábrica del puente y el mismo timeout; la llamada se ejecuta en un hilo daemon para no bloquear la locución y no se inicia otra compactación en paralelo en la misma instancia.
 - Se incorpora el resumen anterior en cada síntesis posterior. La copia de respaldo se actualiza antes de reemplazar el archivo principal.
 - Si solo existen cinco interacciones y el tamaño excede 4 KiB, no se eliminan mensajes recientes: el límite físico puede superarse hasta que existan registros antiguos que resumir. La ventana conversacional prevalece sobre la cuota de bytes.
 
@@ -54,7 +54,7 @@ La persistencia local no requiere conexión. Si Gemini no está disponible duran
 
 ## Fuentes oficiales consultadas (8 de octubre de 2026)
 
-- [Gemini: modelos disponibles](https://ai.google.dev/gemini-api/docs/models): identifica `gemini-3.5-flash-lite` como estable y de bajo coste/alta velocidad; la página recomienda modelos recientes para proyectos nuevos.
+- [Gemini: modelos disponibles](https://ai.google.dev/gemini-api/docs/models): se consultó durante el diseño inicial; el modelo efectivo en runtime lo determina `GEMINI_MODEL` en la configuración privada de Gemini.
 - [Gemini: recuento de tokens](https://ai.google.dev/gemini-api/docs/tokens): explica límites de contexto y que la instrucción de sistema también consume tokens.
 - [Gemini: generación de texto y conversaciones](https://ai.google.dev/gemini-api/docs/text-generation): describe instrucciones de sistema y estado de conversación administrado por API. Jarvis conserva su modo stateless actual y gestiona historial localmente.
 - [Python: `os.replace` y `os.fsync`](https://docs.python.org/3/library/os.html#os.replace): reemplazo atómico cuando el sistema de archivos lo soporta y sincronización explícita del descriptor.

@@ -8,6 +8,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from config import settings
 from config.settings import GeminiCredentials
 from core.interfaces import AssistantBridge
 
@@ -60,9 +61,27 @@ class GeminiBridge(AssistantBridge):
             with urllib.request.urlopen(request, timeout=self._timeout_seconds) as response:
                 return self._extract_reply(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
-            raise RuntimeError(f"Gemini no está disponible ({error.code})") from error
+            detail = self._extract_http_error_message(error)
+            message = f"Gemini no está disponible ({error.code})"
+            if detail:
+                message += f": {detail}"
+            raise RuntimeError(message) from error
         except urllib.error.URLError as error:
             raise RuntimeError(f"No se pudo contactar con Gemini: {error.reason}") from error
+
+    @staticmethod
+    def _extract_http_error_message(error: urllib.error.HTTPError) -> str:
+        try:
+            payload = json.loads(error.read().decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return ""
+        if not isinstance(payload, dict):
+            return ""
+        details = payload.get("error")
+        if not isinstance(details, dict):
+            return ""
+        message = details.get("message")
+        return message.strip() if isinstance(message, str) else ""
 
     @staticmethod
     def _extract_reply(body: str) -> str:
@@ -75,3 +94,18 @@ class GeminiBridge(AssistantBridge):
         if not reply:
             raise RuntimeError("Gemini devolvió una respuesta vacía")
         return reply
+
+
+def create_configured_gemini_bridge(
+    history_limit: int,
+    system_prompt_path: str | Path | None = None,
+    include_system_prompt: bool = True,
+) -> GeminiBridge:
+    """Build every Gemini client with the same configured model and timeout."""
+    return GeminiBridge(
+        credentials=settings.load_gemini_credentials(),
+        history_limit=history_limit,
+        timeout_seconds=settings.GEMINI_TIMEOUT_SECONDS,
+        system_prompt_path=system_prompt_path,
+        include_system_prompt=include_system_prompt,
+    )
