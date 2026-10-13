@@ -7,6 +7,13 @@ from config.settings import GeminiCredentials
 
 
 class GeminiSystemInstructionTest(unittest.TestCase):
+    def test_default_system_prompt_instructs_gemini_to_keep_memory_topics_separate(self) -> None:
+        system_prompt = GeminiBridge._load_system_prompt(None)
+
+        self.assertIn("trata cada sección como un concepto independiente", system_prompt)
+        self.assertIn("No mezcles temas diferentes", system_prompt)
+        self.assertIn("si hay duda, conserva ambos por separado", system_prompt)
+
     def test_build_request_payload_includes_system_instruction(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             system_prompt = Path(directory) / "system.md"

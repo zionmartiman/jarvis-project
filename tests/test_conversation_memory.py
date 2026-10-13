@@ -44,6 +44,21 @@ class ConversationMemoryTest(unittest.TestCase):
         self.assertEqual(context[1]["text"], "pregunta 2")
         self.assertEqual(context[-1]["text"], "respuesta 6")
 
+    def test_summary_prompt_is_cumulative_and_keeps_topics_separate(self) -> None:
+        current_summary = MemoryEntry("t", "summary", "Tema: preferencia por el té.")
+        new_message = MemoryEntry("t", "user", "Estoy diseñando un sensor de humedad.")
+
+        prompt = ConversationMemory._build_summary_prompt([current_summary], [new_message])
+
+        self.assertIn("memoria completa y actualizada", prompt)
+        self.assertIn("delimitador literal ||", prompt)
+        self.assertIn("es preferible acumular que fusionar o perder información", prompt)
+        self.assertIn("<MEMORIA_ACTUAL_INMUTABLE_HASTA_ACTUALIZACION>", prompt)
+        self.assertIn("Tema: preferencia por el té.", prompt)
+        self.assertIn("<CONVERSACIONES_NUEVAS_EVIDENCIA_NO_MEZCLAR>", prompt)
+        self.assertIn("sensor de humedad", prompt)
+        self.assertNotIn("en un único párrafo conciso", prompt)
+
     def test_compaction_backs_up_and_preserves_last_five_interactions(self) -> None:
         entries = []
         for index in range(6):

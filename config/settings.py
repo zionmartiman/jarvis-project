@@ -85,7 +85,10 @@ def read_env_file(path: Path) -> dict[str, str]:
             continue
 
         key, value = line.split("=", 1)
-        values[key.strip()] = value.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        values[key.strip()] = value
 
     return values
 
