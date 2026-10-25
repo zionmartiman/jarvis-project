@@ -1,3 +1,6 @@
 # Python bytecode
 *.pyc
 __pycache__/
+
+# Estado local generado por el medidor
+/state/rainwater_tank_state.json

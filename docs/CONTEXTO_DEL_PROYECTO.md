@@ -53,9 +53,28 @@ Las conexiones aparecen documentadas en el firmware [ARDUINO/Main program/main.c
 2. El monitor de botones, el medidor y el servidor web se inician antes de entrar en el bucle de conversación.
 3. Jarvis solicita por voz elegir Gemini diciendo «uno» o «1», o Vento diciendo «dos» o «2».
 4. Solo se crea el puente elegido. Gemini usa por defecto `gemini-2.5-flash`; Vento envía texto al puente configurado.
-5. La conversación conserva hasta seis elementos de historial (tres pares usuario/asistente) durante la sesión activa. Ese historial se reinicia al volver al modo de espera.
+5. La conversación conserva hasta seis elementos de historial temporal (tres pares usuario/asistente) durante la sesión activa. Ese historial se reinicia al volver al modo de espera; además existe una memoria duradera local descrita en la sección siguiente.
 
 La síntesis de voz Azure se configura al construir el sistema, antes de elegir el agente. Por tanto, Azure y su archivo de credenciales son necesarios incluso si se selecciona Gemini. El modelo de Vosk se carga localmente desde `models/vosk-model-small-es-0.42`.
+
+### Memoria de conversación
+
+El proyecto mantiene dos capas de historial distintas:
+
+- **Historial temporal:** hasta seis mensajes (tres intercambios completos) en memoria del proceso. Se conserva durante la conversación activa, incluso al cambiar entre Gemini y Vento, y se descarta al volver al modo de espera. No sobrevive al reinicio del proceso.
+- **Memoria duradera local:** después de recibir una respuesta, `ConversationMemory` guarda el intercambio en `state/conversation.jsonl`, tanto si se atendió con Gemini como con Vento. Esto significa que se archivan los turnos de ambos agentes, pero **no que ambos recuperen o reciban esta memoria duradera**. Cada línea es un objeto JSON con `timestamp` UTC, `role` (`user` o `assistant`) y `content`. Los comandos reservados que no se envían al modelo y las peticiones que fallan antes de obtener respuesta no se registran como intercambios.
+
+Al iniciar, la memoria lee el JSONL existente; si el fichero no existe, comienza vacía. Las escrituras añaden las dos líneas de cada intercambio y fuerzan su persistencia en disco. La configuración actual comprueba si debe compactar al arrancar y después de cada intercambio: lo hace si hay más de diez mensajes de conversación almacenados (normalmente al completar el sexto intercambio) o si el fichero supera 4096 bytes. El umbral de tamaño provoca la compactación, no limita el tamaño máximo del fichero.
+
+La compactación se ejecuta en segundo plano y **genera el resumen mediante una petición real a Gemini**. Usa las credenciales, el modelo configurado para Gemini (por defecto `gemini-2.5-flash`) y el timeout general; para esta petición desactiva el prompt de sistema de Jarvis y envía una instrucción específica de actualización de memoria. El prompt contiene el resumen previo, si ya existe, y los intercambios antiguos que van a compactarse, expresados como roles y textos (sin sus timestamps). Indica a Gemini que devuelva la memoria acumulativa completa en español, organizada por temas separados por `||`, conservando hechos, nombres, decisiones, preferencias y tareas pendientes; también le pide no inventar relaciones, no perder información por brevedad y mantener visibles las contradicciones en vez de decidirlas sin evidencia.
+
+La respuesta no se guarda como si fuera otro turno hablado: se recorta y se escribe como una entrada JSONL con `role: "summary"`, timestamp y el texto generado. En el fichero principal queda un único resumen actualizado seguido por los cinco intercambios completos más recientes. Esos intercambios conservan sus entradas normales `role: "user"` y `role: "assistant"`; `assistant` es la respuesta del agente que atendió ese turno, Gemini o Vento. Los intercambios anteriores incluidos en el resumen dejan de estar como transcripciones individuales en el fichero principal. En la siguiente compactación, Gemini recibe el resumen ya guardado junto con los nuevos intercambios antiguos para producir el resumen acumulativo actualizado, y se vuelven a conservar aparte los cinco intercambios más recientes.
+
+Antes de sustituir el fichero se crea o reemplaza `state/conversation.jsonl.bak` con una copia de la versión anterior; el JSONL nuevo se escribe mediante sustitución atómica. Si la llamada a Gemini falla o devuelve un resumen vacío, se registra una advertencia y se conserva el historial original sin compactar. La compactación puede volver a intentarse al arrancar de nuevo o después de otro intercambio. Un final de fichero truncado se descarta al leer; una línea corrupta en medio del fichero provoca un error.
+
+**Recuperación para los agentes:** solo Gemini consulta la memoria duradera: en cada petición, Jarvis carga el último resumen disponible y hasta cinco intercambios completos recientes del JSONL. Gemini recibe el resumen como instrucción de sistema y las conversaciones recientes como historial; el puente admite hasta once mensajes de historial previos, sin contar la petición actual. Normalmente esta memoria aporta diez mensajes de historial (cinco pares) y el resumen. Vento no consulta ni recibe la memoria duradera ni su resumen. Recibe únicamente el historial temporal compartido de la conversación activa, limitado a los últimos seis mensajes (tres pares); por eso puede tener contexto de turnos recientes de Gemini o Vento dentro de esa sesión. Al cambiar de agente ese historial temporal se mantiene, pero al volver al modo de espera se pierde. Los turnos de Vento sí se guardan como mensajes `user`/`assistant` y pueden reaparecer en el resumen o en los cinco intercambios recientes que posteriormente recupera Gemini.
+
+Esta memoria se guarda únicamente en los ficheros locales indicados. El código actual no la sincroniza con Obsidian ni la convierte a notas Markdown.
 
 ## Flujo de voz
 
@@ -159,7 +178,8 @@ Ese archivo contiene un valor con forma de clave de dispositivo. No se reproduce
 | Gemini | `~/.config/jarvis-voice/gemini.env` | `GEMINI_API_KEY`, opcionalmente `GEMINI_MODEL` |
 | Puente Vento | `state/bridge.env` | `BRIDGE_URL`, `BRIDGE_TOKEN` |
 | Modelo Vosk | `models/vosk-model-small-es-0.42` | Archivos del modelo local español |
-| Estado del depósito | `state/rainwater_tank_state.json` | Última medida válida, generada por el programa |
+| Memoria conversacional | `state/conversation.jsonl` y `state/conversation.jsonl.bak` | Historial JSONL local y copia previa a compactaciones |
+| Estado del depósito | `state/rainwater_tank_state.json` | Última medida válida, generada localmente por el programa y excluida de Git |
 
 Las rutas, dispositivo de audio, puerto serie, modelo Gemini, voz Azure, intervalo de lectura y rutas de socket están centralizados en [config/settings.py](config/settings.py) y en los valores por defecto de sus clases. Este documento no contiene claves ni tokens.
 
@@ -179,6 +199,7 @@ Estos puntos afectan a la diferencia entre el repositorio y la instalación desc
 
 - Arranque e integración de dependencias: [main.py](main.py)
 - Orquestación, selección del agente y estados: [core/conversation.py](core/conversation.py)
+- Persistencia y recuperación de memoria conversacional: [core/memory.py](core/memory.py)
 - Comandos reservados: [core/intents.py](core/intents.py)
 - Configuración y carga de credenciales: [config/settings.py](config/settings.py)
 - Captura y reconocimiento local: [audio/microphone_stream.py](audio/microphone_stream.py), [speech/vosk_recognizer.py](speech/vosk_recognizer.py)
