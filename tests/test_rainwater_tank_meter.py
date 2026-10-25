@@ -4,10 +4,6 @@ from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 
-from tests import arduino_stub
-
-arduino_stub.install()
-
 from Sensors.rainwater_tank_meter import RainwaterTankLevel, RainwaterTankMeter
 
 

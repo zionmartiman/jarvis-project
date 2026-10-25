@@ -1,24 +1,28 @@
 #!/usr/bin/env python3
 """Composition root for Jarvis Voice."""
 
+import logging
 from pathlib import Path
+import sys
 import threading
 
-from Arduino.arduino_mega_connection import ArduinoMegaConnection
-from audio.microphone_stream import MicrophoneStream
 from bridge.gemini_bridge import GeminiBridge, create_configured_gemini_bridge
 from bridge.vento_bridge import VentoBridge
 from config import settings
 from Indicators.arduino_rgb_indicator import ArduinoRgbIndicator
 from notifications.announcement_client import enqueue as enqueue_announcement
 from Sensors.rainwater_tank_meter import RainwaterTankLevel, RainwaterTankMeter
-from Sensors.rainwater_tank_web_server import RainwaterTankWebServer
 from core.conversation import ConversationOrchestrator
 from core.interfaces import AssistantBridge
-from core.memory import ConversationMemory, JsonlMemoryBackend
-from speech.azure_synthesizer import AzureSpeechSynthesizer
-from speech.vosk_recognizer import VoskSpeechRecognizer
-from system.power_control import RaspberryPowerController
+from core.memory import ConversationMemory
+from jarvis.config.settings import WebSettings
+from jarvis.infrastructure.arduino.serial_connection import ArduinoSerialConnection
+from jarvis.infrastructure.audio.microphone import SoundDeviceMicrophone
+from jarvis.infrastructure.memory.jsonl_backend import JsonlMemoryBackend
+from jarvis.infrastructure.speech.azure_synthesizer import AzureSpeechSynthesizer
+from jarvis.infrastructure.speech.vosk_recognizer import VoskSpeechRecognizer
+from jarvis.infrastructure.system.power_controller import SudoPowerController
+from jarvis.infrastructure.web.tank_web_server import DEFAULT_DASHBOARD_PATH, TankWebServer
 from system.arduino_button_monitor import ArduinoButtonMonitor
 
 _TANK_STATUS_MESSAGES = {"full": "Depósito lleno.", "nearly_full": "Depósito casi lleno.", "good": "Buenos niveles de agua.", "low": "Niveles de agua bajos.", "very_low": "Niveles de agua muy bajos, se está a punto de quedar sin agua.", "empty": "Depósito vacío."}
@@ -55,13 +59,13 @@ def summarize_memory(prompt: str) -> str:
     return summarizer.ask(prompt, [])
 
 
-def build_orchestrator() -> tuple[ConversationOrchestrator, MicrophoneStream, ArduinoRgbIndicator, RainwaterTankMeter, RainwaterTankWebServer, ArduinoButtonMonitor]:
+def build_orchestrator() -> tuple[ConversationOrchestrator, SoundDeviceMicrophone, ArduinoRgbIndicator, RainwaterTankMeter, TankWebServer, ArduinoButtonMonitor]:
     azure_credentials = settings.load_azure_credentials()
-    microphone = MicrophoneStream(sample_rate=settings.SAMPLE_RATE, device=settings.INPUT_DEVICE)
+    microphone = SoundDeviceMicrophone(sample_rate=settings.SAMPLE_RATE, device=settings.INPUT_DEVICE)
     recognizer = VoskSpeechRecognizer(microphone=microphone, model_path=settings.MODEL_PATH, sample_rate=settings.SAMPLE_RATE)
-    synthesizer = AzureSpeechSynthesizer(credentials=azure_credentials, voice_name=settings.AZURE_VOICE, output_device=settings.OUTPUT_DEVICE)
-    power_controller = RaspberryPowerController()
-    arduino = ArduinoMegaConnection(port=settings.ARDUINO_SERIAL_PORT, baudrate=settings.ARDUINO_BAUDRATE)
+    synthesizer = AzureSpeechSynthesizer(credentials=azure_credentials, voice_name=settings.AZURE_VOICE, output_device=settings.OUTPUT_DEVICE, playback_lock_path=settings.PLAYBACK_LOCK_PATH)
+    power_controller = SudoPowerController()
+    arduino = ArduinoSerialConnection(port=settings.ARDUINO_SERIAL_PORT, baudrate=settings.ARDUINO_BAUDRATE)
     arduino.connect()
     status_indicator = ArduinoRgbIndicator(arduino=arduino, control_socket_path=settings.ARDUINO_CONTROL_SOCKET_PATH)
     shutdown_button_event = threading.Event()
@@ -71,7 +75,7 @@ def build_orchestrator() -> tuple[ConversationOrchestrator, MicrophoneStream, Ar
     status_indicator.start_control_receiver()
     button_monitor.start()
     rainwater_tank_meter.start_polling()
-    rainwater_tank_web_server = RainwaterTankWebServer(latest_level=rainwater_tank_meter.latest_level)
+    rainwater_tank_web_server = TankWebServer(latest_level=rainwater_tank_meter.latest_level, host=WebSettings().host, port=WebSettings().port, dashboard_path=DEFAULT_DASHBOARD_PATH)
     rainwater_tank_web_server.start()
     conversation_memory = ConversationMemory(
         JsonlMemoryBackend(settings.CONVERSATION_MEMORY_PATH),
@@ -85,6 +89,7 @@ def build_orchestrator() -> tuple[ConversationOrchestrator, MicrophoneStream, Ar
 
 
 def main() -> None:
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     orchestrator, microphone, status_indicator, rainwater_tank_meter, rainwater_tank_web_server, button_monitor = build_orchestrator()
     print("Jarvis por voz está listo. Di «Jarvis».", flush=True)
     try:

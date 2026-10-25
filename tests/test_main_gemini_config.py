@@ -5,9 +5,9 @@ from config.settings import GeminiCredentials
 
 
 class MainGeminiConfigTest(unittest.TestCase):
-    @unittest.skip("Rewritten in phase 6: main.py cannot import 'Arduino'")
+    @unittest.skip("Rewritten in phase 6: main.py needs sounddevice, vosk, azure and serial")
     def test_conversation_and_memory_summary_share_model_and_timeout(self) -> None:
-        # Imported here because `import main` fails at import time until phase 6.
+        # Imported here because `import main` needs the Raspberry Pi libraries until phase 6.
         import main
 
         credentials = GeminiCredentials(api_key="test-key", model="gemini-test-model")

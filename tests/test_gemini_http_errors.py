@@ -23,7 +23,7 @@ class GeminiHttpErrorTest(unittest.TestCase):
             include_system_prompt=False,
         )
 
-        with patch("bridge.gemini_bridge.urllib.request.urlopen", side_effect=http_error):
+        with patch("urllib.request.urlopen", side_effect=http_error):
             with self.assertRaisesRegex(RuntimeError, "503.*The model is overloaded"):
                 bridge.ask("Hola", [])
 

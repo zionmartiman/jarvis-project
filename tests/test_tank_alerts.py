@@ -5,10 +5,6 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from tests import arduino_stub
-
-arduino_stub.install()
-
 from Sensors.rainwater_tank_meter import RainwaterTankLevel, RainwaterTankMeter
 
 

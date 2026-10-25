@@ -7,10 +7,10 @@ import logging
 import os
 import socket
 
-from Indicators.arduino_alert_client import ArduinoAlertClient
 from config import settings
-from core.interfaces import AlertLight
-from speech.azure_synthesizer import AzureSpeechSynthesizer
+from jarvis.infrastructure.ipc.alert_light_client import AlertLightClient
+from jarvis.infrastructure.speech.azure_synthesizer import AzureSpeechSynthesizer
+from jarvis.ports.hardware import AlertLight
 
 LOGGER = logging.getLogger(__name__)
 
@@ -87,8 +87,9 @@ def main() -> None:
         credentials=settings.load_azure_credentials(),
         voice_name=settings.AZURE_VOICE,
         output_device=settings.OUTPUT_DEVICE,
+        playback_lock_path=settings.PLAYBACK_LOCK_PATH,
     )
-    alert_light = ArduinoAlertClient(settings.ARDUINO_CONTROL_SOCKET_PATH)
+    alert_light = AlertLightClient(settings.ARDUINO_CONTROL_SOCKET_PATH)
     AnnouncementService(synthesizer, alert_light).run_forever()
 
 

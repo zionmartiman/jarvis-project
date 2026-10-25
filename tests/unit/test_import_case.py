@@ -16,12 +16,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CHECKED_LOCATIONS = ("jarvis", "main.py", "tests")
 
-# Imports of the pre-refactor code that are wrong on Linux and still exist. Each entry is
-# removed when its file is rewritten (Phase 6 for main.py); test_known_violations_are_still_real
-# fails once an entry no longer applies, so this list cannot go stale.
-KNOWN_LEGACY_VIOLATIONS = {
-    ("main.py", "Arduino.arduino_mega_connection"),
-}
+# Imports of the pre-refactor code that are wrong on Linux and still exist. Phase 3 removed the
+# last one (main.py no longer imports ``Arduino``); test_known_violations_are_still_real fails
+# when an entry no longer applies, so this list cannot go stale.
+KNOWN_LEGACY_VIOLATIONS: set[tuple[str, str]] = set()
 
 
 def _first_party_names(root: Path) -> dict[str, str]:

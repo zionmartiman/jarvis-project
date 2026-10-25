@@ -2,27 +2,22 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-import json
 import logging
-import os
 from pathlib import Path
 import threading
 import time
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
-from Arduino.arduino_mega_connection import ArduinoMegaConnection
+from jarvis.domain.tank import TankLevel
+from jarvis.infrastructure.arduino.distance_sensor import ArduinoDistanceSensor
+from jarvis.infrastructure.tank.state_file import JsonTankStateFile
+
+if TYPE_CHECKING:
+    from jarvis.infrastructure.arduino.serial_connection import SerialRequester
 
 LOGGER = logging.getLogger(__name__)
 
-
-@dataclass(frozen=True)
-class RainwaterTankLevel:
-    """One valid rainwater tank measurement."""
-
-    distance_cm: float
-    fill_percentage: int
-    measured_at_unix_seconds: float
+RainwaterTankLevel = TankLevel
 
 
 class RainwaterTankMeter:
@@ -33,12 +28,9 @@ class RainwaterTankMeter:
     ALERT_FILL_LEVEL_CHANGE_PERCENTAGE = 5
     MINIMUM_ALERT_INTERVAL_SECONDS = 5.0
 
-    _DISTANCE_COMMAND = "SENSOR DISTANCE"
-    _DISTANCE_PREFIX = "DISTANCE_CM "
-
     def __init__(
         self,
-        arduino: ArduinoMegaConnection,
+        arduino: SerialRequester,
         state_path: Path,
         on_fill_level_changed: Callable[[RainwaterTankLevel], None] | None = None,
         on_fill_level_status_changed: (
@@ -46,8 +38,8 @@ class RainwaterTankMeter:
         ) = None,
         poll_interval_seconds: float = 5.0,
     ) -> None:
-        self._arduino = arduino
-        self._state_path = state_path
+        self._sensor = ArduinoDistanceSensor(arduino)
+        self._state_store = JsonTankStateFile(state_path)
         self._on_fill_level_changed = on_fill_level_changed
         self._on_fill_level_status_changed = on_fill_level_status_changed
         self._poll_interval_seconds = poll_interval_seconds
@@ -97,21 +89,7 @@ class RainwaterTankMeter:
             self._polling_thread = None
 
     def _read_distance_cm(self) -> float | None:
-        response = self._arduino.request(self._DISTANCE_COMMAND)
-        if response is None:
-            return None
-        if not response.startswith(self._DISTANCE_PREFIX):
-            LOGGER.warning("Unexpected rainwater tank response: %s", response)
-            return None
-        try:
-            distance_cm = float(response.removeprefix(self._DISTANCE_PREFIX))
-        except ValueError:
-            LOGGER.warning("Invalid rainwater tank distance: %s", response)
-            return None
-        if distance_cm <= 0:
-            LOGGER.warning("Rainwater tank distance unavailable: %s", response)
-            return None
-        return distance_cm
+        return self._sensor.read_distance_cm()
 
     @classmethod
     def _fill_percentage_for(cls, distance_cm: float) -> int:
@@ -132,7 +110,7 @@ class RainwaterTankMeter:
     def _publish(self, level: RainwaterTankLevel) -> None:
         with self._latest_level_lock:
             self._latest_level = level
-        self._write_state_file(level)
+        self._state_store.save(level)
         if not self._has_logged_first_level:
             self._has_logged_first_level = True
             print(
@@ -141,18 +119,6 @@ class RainwaterTankMeter:
                 flush=True,
             )
         self._notify(level)
-
-    def _write_state_file(self, level: RainwaterTankLevel) -> None:
-        try:
-            self._state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            temporary_path = self._state_path.with_suffix(".tmp")
-            temporary_path.write_text(
-                json.dumps(asdict(level), ensure_ascii=False) + "\n",
-                encoding="utf-8",
-            )
-            os.replace(temporary_path, self._state_path)
-        except OSError:
-            LOGGER.exception("Unable to publish rainwater tank state.")
 
     def _notify(self, level: RainwaterTankLevel) -> None:
         """Notify percentage changes and only directional status threshold crossings."""

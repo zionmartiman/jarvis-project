@@ -1,46 +1,37 @@
-"""
-Captura de audio del micrófono.
-
-Encapsula sounddevice y la cola de audio en una sola clase, en lugar
-de usar variables globales como en el fichero original. Cualquier
-SpeechRecognizer recibe una instancia de MicrophoneStream y lee
-fragmentos de audio con read_chunk(), sin saber nada de sounddevice.
-"""
+"""USB microphone capture through sounddevice."""
 
 from __future__ import annotations
 
+import logging
 import queue
-import sys
 import threading
 
 import sounddevice as sd
 
+from jarvis.ports.audio import AudioInput
 
-class MicrophoneStream:
-    """
-    Envuelve sounddevice.RawInputStream.
+LOGGER = logging.getLogger(__name__)
 
-    sounddevice entrega continuamente fragmentos de audio mediante una
-    función callback interna. Esta clase los coloca en una cola y
-    expone un método bloqueante (read_chunk) para consumirlos.
-    """
+
+class SoundDeviceMicrophone(AudioInput):
+    """Buffers microphone audio in a bounded queue and serves it chunk by chunk."""
 
     def __init__(
         self,
         sample_rate: int,
-        device,
+        device: int | str,
         block_size: int = 8000,
         queue_max_size: int = 32,
-    ):
+    ) -> None:
         self._sample_rate = sample_rate
         self._device = device
         self._block_size = block_size
 
-        # Se limita el tamaño para que nunca crezca indefinidamente.
-        self._queue: queue.Queue = queue.Queue(maxsize=queue_max_size)
+        # The queue is bounded so it never grows indefinitely.
+        self._queue: queue.Queue[bytes] = queue.Queue(maxsize=queue_max_size)
 
-        # Mientras Jarvis piensa o habla, no queremos guardar el audio
-        # del micrófono. Solo se activa cuando alguien debe escuchar.
+        # While Jarvis thinks or speaks its own voice must not be recorded:
+        # audio is kept only while someone is meant to listen.
         self._capture_enabled = threading.Event()
 
         self._stream = sd.RawInputStream(
@@ -54,7 +45,7 @@ class MicrophoneStream:
 
     def _on_audio(self, indata, frames, time_info, status) -> None:
         if status:
-            print(f"Estado del micrófono: {status}", file=sys.stderr)
+            LOGGER.warning("Microphone status: %s", status)
 
         if not self._capture_enabled.is_set():
             return
@@ -64,8 +55,7 @@ class MicrophoneStream:
         try:
             self._queue.put_nowait(audio)
         except queue.Full:
-            # Si la cola se llena, eliminamos el fragmento más antiguo.
-            # Es preferible mantener audio reciente.
+            # Recent audio is worth more than old audio: drop the oldest chunk.
             try:
                 self._queue.get_nowait()
             except queue.Empty:
@@ -77,8 +67,7 @@ class MicrophoneStream:
                 pass
 
     def clear(self) -> None:
-        """Elimina audio antiguo que pudiera quedar pendiente."""
-
+        """Discard audio that is still pending."""
         while True:
             try:
                 self._queue.get_nowait()
@@ -86,23 +75,19 @@ class MicrophoneStream:
                 return
 
     def start_capture(self) -> None:
-        """Prepara y activa la captura del micrófono."""
-
         self.clear()
         self._capture_enabled.set()
 
     def stop_capture(self) -> None:
-        """Detiene la captura lógica y descarta el audio pendiente."""
-
+        """Stop capturing and discard the pending audio."""
         self._capture_enabled.clear()
         self.clear()
 
     def read_chunk(self, timeout: float | None = None) -> bytes:
-        """Bloquea hasta que haya un fragmento de audio disponible."""
-
+        """Block until a chunk is available; raises ``queue.Empty`` on timeout."""
         return self._queue.get(timeout=timeout)
 
-    def __enter__(self) -> "MicrophoneStream":
+    def __enter__(self) -> SoundDeviceMicrophone:
         self._stream.__enter__()
         return self
 

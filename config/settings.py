@@ -5,8 +5,11 @@ Configuración general de Jarvis Voice.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from pathlib import Path
+
+from jarvis.config.credentials import AzureCredentials, GeminiCredentials
+from jarvis.config.credentials import VentoCredentials as BridgeCredentials
+from jarvis.config.env_file import read_env_file
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -47,48 +50,15 @@ ARDUINO_CONTROL_SOCKET_PATH = (
 ANNOUNCEMENT_SOCKET_PATH = (
     Path("/run/user") / str(get_runtime_uid()) / "jarvis-announcer.sock"
 )
+PLAYBACK_LOCK_PATH = (
+    Path("/run/user") / str(get_runtime_uid()) / "jarvis-speech.lock"
+)
 MAX_ANNOUNCEMENT_CHARACTERS = 500
 MAX_ANNOUNCEMENT_DATAGRAM_BYTES = 2048
 
 # Queryable rainwater tank state, updated by RainwaterTankMeter.
 RAINWATER_TANK_STATE_PATH = BASE_DIR / "state" / "rainwater_tank_state.json"
 RAINWATER_TANK_POLL_INTERVAL_SECONDS = 5.0
-
-
-@dataclass(frozen=True)
-class AzureCredentials:
-    """Credenciales necesarias para usar Azure Speech."""
-
-    key: str
-    region: str
-
-
-@dataclass(frozen=True)
-class BridgeCredentials:
-    """Credenciales necesarias para hablar con el puente de Vento."""
-
-    url: str
-    token: str
-
-
-def read_env_file(path: Path) -> dict[str, str]:
-    """Lee un archivo KEY=VALUE sin imprimir su contenido."""
-    if not path.exists():
-        raise RuntimeError(f"No existe la configuración: {path}")
-
-    values: dict[str, str] = {}
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-
-        key, value = line.split("=", 1)
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
-        values[key.strip()] = value
-
-    return values
 
 
 def load_azure_credentials() -> AzureCredentials:
@@ -120,14 +90,6 @@ def load_bridge_credentials() -> BridgeCredentials:
 GEMINI_CONFIG_PATH = Path.home() / ".config" / "jarvis-voice" / "gemini.env"
 GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_TIMEOUT_SECONDS = 130
-
-
-@dataclass(frozen=True)
-class GeminiCredentials:
-    """Credenciales necesarias para usar Gemini."""
-
-    api_key: str
-    model: str
 
 
 def load_gemini_credentials() -> GeminiCredentials:

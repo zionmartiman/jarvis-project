@@ -1,24 +1,25 @@
-"""Azure Speech implementation shared by replies and incoming announcements."""
+"""Azure Speech synthesis shared by replies and incoming announcements."""
 
 from __future__ import annotations
 
 import logging
 import threading
 from collections.abc import Callable
+from pathlib import Path
 
 import azure.cognitiveservices.speech as speechsdk
 
-from audio.player import PlaybackLock, RawPcmPlayer
-from config.settings import AzureCredentials
-from core.interfaces import SpeechSynthesizer
+from jarvis.config.credentials import AzureCredentials
+from jarvis.infrastructure.audio.playback import AplayPcmPlayer, PlaybackLock
+from jarvis.ports.speech import PlaybackAwareSynthesizer
 
 LOGGER = logging.getLogger(__name__)
 
 
 class _AzureStreamAdapter(speechsdk.audio.PushAudioOutputStreamCallback):
-    """Streams Azure PCM fragments to the generic player."""
+    """Streams Azure PCM fragments to the player."""
 
-    def __init__(self, player: RawPcmPlayer):
+    def __init__(self, player: AplayPcmPlayer) -> None:
         super().__init__()
         self._player = player
 
@@ -30,7 +31,7 @@ class _AzureStreamAdapter(speechsdk.audio.PushAudioOutputStreamCallback):
         self._player.close()
 
 
-class AzureSpeechSynthesizer(SpeechSynthesizer):
+class AzureSpeechSynthesizer(PlaybackAwareSynthesizer):
     """Converts text into Azure Speech and plays it through ALSA."""
 
     def __init__(
@@ -38,11 +39,13 @@ class AzureSpeechSynthesizer(SpeechSynthesizer):
         credentials: AzureCredentials,
         voice_name: str,
         output_device: str,
-    ):
+        playback_lock_path: Path,
+    ) -> None:
         self._output_device = output_device
+        self._playback_lock_path = playback_lock_path
         self._active_lock = threading.Lock()
         self._active_generation = 0
-        self._active_player: RawPcmPlayer | None = None
+        self._active_player: AplayPcmPlayer | None = None
         self._active_synthesizer = None
         self._speech_config = speechsdk.SpeechConfig(
             subscription=credentials.key,
@@ -74,12 +77,12 @@ class AzureSpeechSynthesizer(SpeechSynthesizer):
         on_playback_started: Callable[[], None] | None = None,
         on_playback_finished: Callable[[], None] | None = None,
     ) -> None:
-        """Reproduce texto y notifica solo durante la reproducción real."""
+        """Speak ``text`` and notify only while audio is really playing."""
         text = text.strip()
         if not text:
             return
 
-        with PlaybackLock():
+        with PlaybackLock(self._playback_lock_path):
             self._run_callback(on_playback_started)
             try:
                 self._speak_while_locked(text)
@@ -90,7 +93,7 @@ class AzureSpeechSynthesizer(SpeechSynthesizer):
         with self._active_lock:
             generation = self._active_generation
 
-        player = RawPcmPlayer(self._output_device)
+        player = AplayPcmPlayer(self._output_device)
         adapter = _AzureStreamAdapter(player)
         push_stream = speechsdk.audio.PushAudioOutputStream(adapter)
         audio_config = speechsdk.audio.AudioOutputConfig(stream=push_stream)

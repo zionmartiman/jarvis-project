@@ -7,8 +7,11 @@ import threading
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from jarvis.infrastructure.arduino.button_panel import ArduinoButtonPanel
+from jarvis.ports.hardware import ButtonPress
+
 if TYPE_CHECKING:
-    from Arduino.arduino_mega_connection import ArduinoMegaConnection
+    from jarvis.infrastructure.arduino.serial_connection import SerialRequester
 
 LOGGER = logging.getLogger(__name__)
 
@@ -16,16 +19,14 @@ LOGGER = logging.getLogger(__name__)
 class ArduinoButtonMonitor:
     """Polls button status and dispatches shutdown and reply-interrupt presses."""
 
-    _BUTTON_COMMAND = "BUTTON STATUS"
-
     def __init__(
         self,
-        arduino: ArduinoMegaConnection,
+        arduino: SerialRequester,
         on_shutdown_pressed: Callable[[], None],
         on_response_interrupt_pressed: Callable[[], None],
         poll_interval_seconds: float = 0.1,
     ) -> None:
-        self._arduino = arduino
+        self._panel = ArduinoButtonPanel(arduino)
         self._on_shutdown_pressed = on_shutdown_pressed
         self._on_response_interrupt_pressed = on_response_interrupt_pressed
         self._poll_interval_seconds = poll_interval_seconds
@@ -51,12 +52,12 @@ class ArduinoButtonMonitor:
 
     def _monitor_buttons(self) -> None:
         while not self._stop_monitoring.is_set():
-            response = self._arduino.request(self._BUTTON_COMMAND)
+            press = self._panel.read_pending_press()
             callback = None
-            if response == "BUTTON_SHUTDOWN":
+            if press is ButtonPress.SHUTDOWN:
                 print("Botón físico de apagado detectado por Arduino.", flush=True)
                 callback = self._on_shutdown_pressed
-            elif response == "BUTTON_INTERRUPT":
+            elif press is ButtonPress.INTERRUPT:
                 print("Botón para interrumpir la respuesta detectado por Arduino.", flush=True)
                 callback = self._on_response_interrupt_pressed
 

@@ -13,11 +13,11 @@ from core.interfaces import AssistantBridge, AssistantStatus, SpeechRecognizer, 
 from core.memory import ConversationMemory
 
 if TYPE_CHECKING:
-    from audio.microphone_stream import MicrophoneStream
+    from jarvis.ports.audio import AudioInput
 
 
 class ConversationOrchestrator:
-    def __init__(self, microphone: MicrophoneStream, recognizer: SpeechRecognizer, synthesizer: SpeechSynthesizer, bridge_factory: Callable[[str], AssistantBridge], power_controller: SystemController, status_indicator: StatusIndicator, max_history_items: int, shutdown_button_event: threading.Event | None = None, response_interrupt_event: threading.Event | None = None, conversation_memory: ConversationMemory | None = None):
+    def __init__(self, microphone: AudioInput, recognizer: SpeechRecognizer, synthesizer: SpeechSynthesizer, bridge_factory: Callable[[str], AssistantBridge], power_controller: SystemController, status_indicator: StatusIndicator, max_history_items: int, shutdown_button_event: threading.Event | None = None, response_interrupt_event: threading.Event | None = None, conversation_memory: ConversationMemory | None = None):
         self._microphone = microphone
         self._recognizer = recognizer
         self._synthesizer = synthesizer

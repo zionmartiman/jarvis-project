@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import fcntl
-import os
 import subprocess
 from pathlib import Path
 
@@ -11,11 +10,12 @@ from pathlib import Path
 class PlaybackLock:
     """Serializes speaker access between voice replies and announcements."""
 
-    _PATH = Path("/run/user") / str(os.getuid()) / "jarvis-speech.lock"
+    def __init__(self, lock_path: Path) -> None:
+        self._path = lock_path
 
     def __enter__(self) -> None:
-        self._PATH.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        self._handle = self._PATH.open("a+", encoding="utf-8")
+        self._path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self._handle = self._path.open("a+", encoding="utf-8")
         fcntl.flock(self._handle.fileno(), fcntl.LOCK_EX)
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
@@ -23,7 +23,7 @@ class PlaybackLock:
         self._handle.close()
 
 
-class RawPcmPlayer:
+class AplayPcmPlayer:
     """Reproduces raw PCM audio by streaming it directly to aplay."""
 
     def __init__(
@@ -31,7 +31,7 @@ class RawPcmPlayer:
         output_device: str,
         sample_rate: int = 24000,
         channels: int = 1,
-    ):
+    ) -> None:
         self.process = subprocess.Popen(
             [
                 "aplay", "-q", "-D", output_device, "-t", "raw",

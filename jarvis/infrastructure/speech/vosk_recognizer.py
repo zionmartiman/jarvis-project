@@ -1,56 +1,44 @@
-"""
-Reconocimiento de voz local con Vosk.
-
-Implementa la interfaz SpeechRecognizer. Todo el procesamiento ocurre
-en la Raspberry; el audio nunca sale a Internet en esta fase.
-
-Para cambiar de motor de reconocimiento (un servicio en la nube, u
-otro motor local), crea una clase que implemente SpeechRecognizer y
-sustitúyela en main.py.
-"""
+"""Local speech recognition with Vosk. Audio never leaves the Raspberry Pi."""
 
 from __future__ import annotations
 
 import json
-import time
-import threading
+import logging
 import queue
+import time
 from pathlib import Path
 
 from vosk import KaldiRecognizer, Model
 
-from audio.microphone_stream import MicrophoneStream
-from core.interfaces import SpeechRecognizer
+from jarvis.ports.audio import AudioInput
+from jarvis.ports.speech import SpeechRecognizer
+
+LOGGER = logging.getLogger(__name__)
 
 
 class VoskSpeechRecognizer(SpeechRecognizer):
-    """Detecta la palabra de activación y transcribe frases con Vosk."""
+    """Detects the wake word and transcribes sentences with Vosk."""
 
-    # Margen adicional tras el final de frase detectado por Vosk. Si la
-    # persona retoma la frase dentro de este tiempo, Jarvis sigue escuchando.
+    # Extra margin after Vosk detects the end of a sentence. If the person resumes
+    # within it, Jarvis keeps listening.
     _CONTINUATION_GRACE_SECONDS = 1.0
 
     def __init__(
         self,
-        microphone: MicrophoneStream,
+        microphone: AudioInput,
         model_path: Path,
         sample_rate: int,
         wake_word: str = "jarvis",
-    ):
+    ) -> None:
         self._microphone = microphone
         self._sample_rate = sample_rate
         self._wake_word = wake_word.lower()
 
-        print(f"Cargando modelo local: {model_path}", flush=True)
+        LOGGER.info("Loading local speech model: %s", model_path)
         self._model = Model(str(model_path))
 
-    def wait_for_wake_word(self, interrupt_event: threading.Event | None = None) -> bool:
-        """
-        Escucha únicamente la palabra de activación.
-
-        El audio se procesa localmente y no sale de la Raspberry.
-        """
-
+    def wait_for_wake_word(self) -> None:
+        """Listen only for the wake word; the audio is processed locally."""
         recognizer = KaldiRecognizer(
             self._model,
             self._sample_rate,
@@ -61,9 +49,6 @@ class VoskSpeechRecognizer(SpeechRecognizer):
 
         try:
             while True:
-                if interrupt_event is not None and interrupt_event.is_set():
-                    interrupt_event.clear()
-                    return True
                 try:
                     audio = self._microphone.read_chunk(timeout=0.2)
                 except queue.Empty:
@@ -74,19 +59,16 @@ class VoskSpeechRecognizer(SpeechRecognizer):
                     text = result.get("text", "").lower()
 
                     if self._wake_word in text:
-                        return False
+                        return
         finally:
             self._microphone.stop_capture()
 
     def listen_for_sentence(self) -> str:
-        """
-        Escucha una frase completa.
+        """Listen for a complete sentence.
 
-        Vosk detecta un posible final tras un silencio. Conservamos un
-        pequeño margen adicional para que una pausa natural al hablar no
-        envíe la instrucción antes de tiempo.
+        Vosk detects a possible end after a silence. A small extra margin keeps a
+        natural pause from sending the instruction too early.
         """
-
         recognizer = KaldiRecognizer(self._model, self._sample_rate)
         segments: list[str] = []
         silence_started_at: float | None = None
@@ -102,9 +84,8 @@ class VoskSpeechRecognizer(SpeechRecognizer):
                     result = json.loads(recognizer.Result())
                     text = result.get("text", "").strip()
 
-                    # Vosk puede marcar un silencio sin texto como final.
-                    # Solo iniciamos la espera adicional después de haber
-                    # reconocido al menos un fragmento de la instrucción.
+                    # Vosk may mark a silence without text as final. The extra wait
+                    # starts only after at least one fragment of the instruction.
                     if text:
                         segments.append(text)
                         silence_started_at = now

@@ -4,18 +4,14 @@ from __future__ import annotations
 
 import argparse
 import base64
-import json
-import socket
 
 from config import settings
+from jarvis.infrastructure.ipc.announcer import SocketAnnouncer
 
 
 def enqueue(text: str) -> None:
-    """Place one validated announcement in the local service queue."""
-    payload = json.dumps({"text": text}, ensure_ascii=False).encode("utf-8")
-
-    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as client:
-        client.sendto(payload, str(settings.ANNOUNCEMENT_SOCKET_PATH))
+    """Place one announcement in the local service queue (logs a warning if nobody listens)."""
+    SocketAnnouncer(settings.ANNOUNCEMENT_SOCKET_PATH).announce(text)
 
 
 def main() -> None:
