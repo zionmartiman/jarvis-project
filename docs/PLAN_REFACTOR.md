@@ -1,6 +1,6 @@
 # Plan de refactor y reestructuración de Jarvis
 
-> **Estado:** en ejecución (preparado el 2026-10-25). Fases 0 y 1 completadas (commit de punto de control `7e46e0f`); fases 2 a 7 pendientes.
+> **Estado:** en ejecución (preparado el 2026-10-25). Fases 0 y 1 completadas (commit de punto de control `7e46e0f`); Fase 2 implementada y pendiente del commit de punto de control; fases 3 a 7 pendientes.
 > Quien ejecute este plan debe marcar aquí cada fase como completada al terminarla.
 
 ## Entorno de ejecución (restricción obligatoria)
@@ -250,6 +250,7 @@ notifications/                  # SOLO 2 shims deprecados (ver Fase 6) hasta act
 4. Al terminar cada fase: `python -m unittest discover -s tests -t .` en verde, `python -m compileall -q jarvis main.py`, actualizar `docs/CONTEXTO_DEL_PROYECTO.md` (regla de `CLAUDE.md`), marcar la fase en `docs/PLAN_REFACTOR.md` y **pedir permiso al usuario** para hacer un commit de punto de control.
 5. Los tests deben poder ejecutarse en Windows: ningún test puede importar `vosk`, `sounddevice`, `azure`, `serial` ni `fcntl`. La capa `application/` solo importa `domain/` y `ports/`.
 6. Si algo del plan no encaja con el código real, **parar y preguntar**; no improvisar diseño.
+7. Al cerrar cada fase, quien la ejecute entrega al propietario en el mensaje final el **título** y la **descripción** del commit de punto de control (la descripción en forma de lista con lo hecho, las desviaciones y el número de tests). Es obligatorio aunque el propietario no lo pida, y se entrega antes de cualquier commit.
 
 ### 3.2 Checklist de cierre de fase (obligatoria)
 
@@ -485,19 +486,19 @@ de arriba, tras desplegar el código (por `scp`/SFTP) y reiniciar el servicio co
 Al terminar cada fase, marca su columna en la matriz (☑ cumplido, ✖ fallo, — no aplica) y anota
 en la tabla de comentarios cualquier incidencia. Si todo ha ido bien, escribe «Sin incidencias».
 
-**Fecha de inicio:** 2026-10-25 · **Ejecutado por (modelo):** Claude Sonnet 5.5 (fases 0 y 1)
+**Fecha de inicio:** 2026-10-25 · **Ejecutado por (modelo):** Claude Sonnet 5.5 (fases 0, 1 y 2)
 
 ### 7.1 Matriz de control
 
 | Punto de control | F0 | F1 | F2 | F3 | F4 | F5 | F6 | F7 |
 | --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-| Pasos de la fase completados (§3.2, punto 1) | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
-| Tests en Windows: nº tests / skips (§3.2, punto 2) | 61 / 1 | 61 / 1 | ____ | ____ | ____ | ____ | ____ | ____ |
-| `compileall` OK (§3.2, punto 3) | ☑¹ | ☑¹ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
-| `test_import_case` pasa (§3.2, punto 4) | — | — | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
-| `git status` revisado (§3.2, punto 5) | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
-| Textos y frases idénticos (§3.2, punto 6) | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
-| `CONTEXTO_DEL_PROYECTO.md` actualizado (§3.2, punto 7) | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Pasos de la fase completados (§3.2, punto 1) | ☑ | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Tests en Windows: nº tests / skips (§3.2, punto 2) | 61 / 1 | 61 / 1 | 118 / 1 | ____ | ____ | ____ | ____ | ____ |
+| `compileall` OK (§3.2, punto 3) | ☑¹ | ☑¹ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| `test_import_case` pasa (§3.2, punto 4) | — | — | ☑² | ☐ | ☐ | ☐ | ☐ | ☐ |
+| `git status` revisado (§3.2, punto 5) | ☑ | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Textos y frases idénticos (§3.2, punto 6) | ☑ | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| `CONTEXTO_DEL_PROYECTO.md` actualizado (§3.2, punto 7) | ☑ | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ |
 | Commit de punto de control aprobado (§3.2, punto 9) | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
 | Secretos fuera de Git (`git ls-files`) | — | ☑ | — | — | — | — | — | — |
 | Subpasos 3.1 a 3.7 completados | — | — | — | ☐ | — | — | — | — |
@@ -510,13 +511,15 @@ en la tabla de comentarios cualquier incidencia. Si todo ha ido bien, escribe «
 
 ¹ En las fases 0 y 1 `jarvis/` aún no existe, así que `compileall` se ejecutó sobre los paquetes actuales (`main.py config core audio speech bridge system Indicators Sensors notifications tests`). Se repetirá con `jarvis/` desde la Fase 2.
 
+² `main.py` sigue importando `Arduino.arduino_mega_connection` (mayúsculas incorrectas en Linux) hasta la Fase 6. El test lo registra en `KNOWN_LEGACY_VIOLATIONS`; el propio test falla si esa entrada deja de ser cierta, así que hay que borrarla al reescribir `main.py`.
+
 ### 7.2 Comentarios e incidencias
 
 | Fase | Comentarios | Hash del commit |
 | --- | --- | --- |
 | 0 — Red de seguridad | `compileall` se ejecutó sobre los paquetes actuales (`jarvis/` aún no existe). `test_main_gemini_config.py` se omite con `skip`; además se movió `import main` dentro del test, porque un `skip` no evita el error de importación a nivel de módulo. Los tests nuevos importan los fakes de `test_conversation_model_switch.py` (`from tests...`) y `tests/arduino_stub.py` sustituye el stub de `Arduino` que estaba duplicado en un test. Se corrigió además la doc de §1.4 (sin selección «uno/dos», acuse «Dime», botón D3 «¿Sí?» en espera y locución, aviso de apagado completo). | `7e46e0f` |
 | 1 — Limpieza y secretos | Sin desviaciones del plan. `.gitignore`: la regla suelta `/state/rainwater_tank_state.json` se absorbe en `/state/*`. `git rm --cached` no toca el disco: `state/bridge.env`, `state/conversation.jsonl(.bak)` y `.vscode/sftp.json` siguen en local. `ARDUINO/main.cs` movido con 100 % de similitud (sin cambios). Los enlaces `ARDUINO/main.cs` de `CONTEXTO_DEL_PROYECTO.md` ya apuntaban a la ruta nueva. **Hallazgo:** la contraseña SSH del `sftp.json` local es igual que el nombre de usuario (`jarvis`): al rotarla hay que elegir una realmente distinta. Siguen en el historial de Git: token del puente, clave del agente y esa contraseña. | `7e46e0f` |
-| 2 — Paquete `jarvis/`: config, dominio y puertos | | |
+| 2 — Paquete `jarvis/`: config, dominio y puertos | Código nuevo añadido sin tocar el antiguo, que sigue funcionando. 118 tests, 1 omitido. **Desviaciones:** (1) `AudioSettings` incluye también `azure_credentials_path`, porque el plan no indicaba dónde va la ruta de `azure.env`; los campos con ruta no tienen valor por defecto y van primero. (2) `PlaybackAwareSynthesizer.speak_with_playback_callbacks` usa los nombres `on_playback_started` / `on_playback_finished` (los del sintetizador actual) y ambos son opcionales, para no romper a quien ya llama con esos nombres. (3) El plan pide a la vez que `test_import_case` falle hoy con `Arduino` y que pase en la Fase 2; se resolvió con la lista `KNOWN_LEGACY_VIOLATIONS` (solo `main.py`, ver nota ² de la matriz) y con tests del propio comprobador que demuestran que detecta `Arduino` y mayúsculas erróneas en `jarvis.*`. (4) Se conservan `tests/test_intents.py`, `test_tank_alerts.py` y `test_config_settings.py`, porque el código antiguo que prueban sigue activo; se borrarán en la Fase 7 y sus casos ya están replicados en `tests/unit/`. (5) `TankAlertPolicy` exige los dos callbacks (sin las comprobaciones `is None` del medidor) y `ShortTermHistory` rechaza `max_messages < 1`. (6) `phrases.SWITCHED_TO` ya dice «Cambiando a Gemini.»; el código antiguo seguirá diciendo «Cambiar a Gemini.» hasta la Fase 5. (7) Solo se crearon los subpaquetes con contenido (`config`, `domain`, `ports`, `infrastructure`); los demás llegan en sus fases. | Pendiente de permiso |
 | 3 — Infraestructura | | |
 | 4 — Aplicación: hilos, depósito, botones y memoria | | |
 | 5 — Conversación (riesgo alto) | | |

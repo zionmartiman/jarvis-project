@@ -224,7 +224,18 @@ Estos puntos afectan a la diferencia entre el repositorio y la instalación desc
 
 ## Refactor planificado
 
-Existe un plan de refactor y reestructuración en [docs/PLAN_REFACTOR.md](PLAN_REFACTOR.md): paquete único `jarvis/` por capas, limpieza de backups y código muerto, retirada de secretos de Git y corrección de los tests que fallan. Ejecutadas hasta ahora: **Fase 0** (red de seguridad: tests de caracterización y arreglo de los 3 tests rotos) y **Fase 1** (limpieza de backups y código muerto, secretos fuera de Git, documentación movida). El resto de fases está pendiente; mientras no se ejecuten, este documento sigue describiendo la estructura actual del código (`core/`, `bridge/`, `Sensors/`, etc.).
+Existe un plan de refactor y reestructuración en [docs/PLAN_REFACTOR.md](PLAN_REFACTOR.md): paquete único `jarvis/` por capas, limpieza de backups y código muerto, retirada de secretos de Git y corrección de los tests que fallan. Ejecutadas hasta ahora: **Fase 0** (red de seguridad: tests de caracterización y arreglo de los 3 tests rotos), **Fase 1** (limpieza de backups y código muerto, secretos fuera de Git, documentación movida) y **Fase 2** (nuevo paquete `jarvis/` con configuración, dominio y puertos). El resto de fases está pendiente; mientras no se ejecuten, el programa que arranca sigue siendo el código antiguo (`core/`, `bridge/`, `Sensors/`, etc.) y este documento lo describe así.
+
+### Paquete `jarvis/` (Fase 2, aún sin usar por `main.py`)
+
+Código nuevo y puro que **todavía no está conectado** al arranque: el comportamiento de la Raspberry no cambia. Contiene solo lo que no hace I/O pesado:
+
+- `jarvis/config/`: `env_file.py` (`read_env_file`, quita comillas), `credentials.py` (`AzureCredentials`, `GeminiCredentials`, `VentoCredentials` y sus `load_*`, que reciben la ruta) y `settings.py` (dataclasses inmutables por grupo con los mismos valores actuales y `load_settings(base_dir)`; la raíz del proyecto es `parents[2]` de ese fichero).
+- `jarvis/domain/`: `AssistantStatus`, `AssistantModel` (Gemini/Vento), `ChatMessage`/`ConversationContext`/`ShortTermHistory`, `Intent` + `classify()` + `is_confirmation()`, `phrases.py` y `tank_phrases.py` (todas las frases habladas, en español), y `tank.py` (`TankLevel`, `TankCalibration`, `TankStatus`, `TankAlertPolicy`, que es la lógica de avisos del depósito copiada del medidor actual).
+- `jarvis/ports/`: interfaces `ABC` (`AudioInput`, `SpeechRecognizer`, `SpeechSynthesizer`, `PlaybackAwareSynthesizer`, `AssistantBridge`, `StatusIndicator`, `AlertLight`, `ButtonPanel`, `DistanceSensor`, `PowerController`, `MemoryBackend`/`MemoryEntry`, `Announcer`, `TankStateStore`).
+- `jarvis/infrastructure/runtime.py`: `runtime_dir()` (`/run/user/<uid>`, uid 1000 si el sistema no tiene `os.getuid`).
+
+`tests/unit/test_import_case.py` compara cada import de `jarvis/`, `main.py` y `tests/` con los nombres reales de ficheros distinguiendo mayúsculas, para detectar en Windows lo que fallaría en la Raspberry. Solo tolera, de forma explícita, el import `Arduino.…` de `main.py` hasta que se reescriba en la Fase 6.
 
 ## Pruebas
 
@@ -234,7 +245,7 @@ Los tests se ejecutan en el PC de desarrollo (Windows), no en la Raspberry:
 python -m unittest discover -s tests -t .
 ```
 
-Estado actual: 61 tests, 1 omitido (`tests/test_main_gemini_config.py`, que no puede importar `main.py` por el problema de mayúsculas de `Arduino` y se reescribirá en la Fase 6). `tests/` es un paquete (`tests/__init__.py`). Los tests de caracterización de la Fase 0 fijan el comportamiento actual de las frases reservadas (`tests/test_intents.py`), los avisos del depósito (`tests/test_tank_alerts.py`), el parseo y la petición del puente Vento (`tests/test_vento_reply_parsing.py`) y los flujos de conversación (`tests/test_conversation_flows.py`). `tests/arduino_stub.py` registra un paquete `Arduino` falso para poder importar los módulos antiguos.
+Estado actual: 118 tests, 1 omitido (`tests/test_main_gemini_config.py`, que no puede importar `main.py` por el problema de mayúsculas de `Arduino` y se reescribirá en la Fase 6). `tests/` es un paquete (`tests/__init__.py`). Los tests de caracterización de la Fase 0 fijan el comportamiento actual de las frases reservadas (`tests/test_intents.py`), los avisos del depósito (`tests/test_tank_alerts.py`), el parseo y la petición del puente Vento (`tests/test_vento_reply_parsing.py`) y los flujos de conversación (`tests/test_conversation_flows.py`). `tests/arduino_stub.py` registra un paquete `Arduino` falso para poder importar los módulos antiguos. Los tests del código nuevo están en `tests/unit/` (`config/`, `domain/` y `test_import_case.py`); varios replican casos de los tests antiguos (frases reservadas, avisos del depósito, `read_env_file`) y los antiguos se borrarán en la Fase 7.
 
 `read_env_file` (`config/settings.py`) ya elimina las comillas simples o dobles que rodean un valor de los ficheros `.env`.
 
