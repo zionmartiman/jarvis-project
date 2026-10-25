@@ -251,6 +251,23 @@ notifications/                  # SOLO 2 shims deprecados (ver Fase 6) hasta act
 5. Los tests deben poder ejecutarse en Windows: ningún test puede importar `vosk`, `sounddevice`, `azure`, `serial` ni `fcntl`. La capa `application/` solo importa `domain/` y `ports/`.
 6. Si algo del plan no encaja con el código real, **parar y preguntar**; no improvisar diseño.
 
+### 3.2 Checklist de cierre de fase (obligatoria)
+
+Quien ejecute una fase debe completar esta lista y copiarla en el **Registro de ejecución** (§7).
+Una fase no se marca como completada si falta algún punto; si alguno no aplica, márcalo como «N/A» y explícalo en comentarios.
+
+| # | Punto | Criterio de cumplimiento |
+| --- | --- | --- |
+| 1 | Pasos de la fase | Todos los pasos hechos, ninguno a medias. |
+| 2 | Tests en Windows | `python -m unittest discover -s tests -t .` pasa. Anotar número de tests y skips. |
+| 3 | Compilación | `python -m compileall -q jarvis main.py` pasa. |
+| 4 | Nombres exactos | `tests/unit/test_import_case.py` pasa (desde la Fase 2). |
+| 5 | Git limpio | `git status` revisado: solo cambios esperados, sin ficheros de la fase sin añadir. |
+| 6 | Textos idénticos | Frases habladas y líneas de transcripción iguales (§3, regla 2). |
+| 7 | Documentación | `docs/CONTEXTO_DEL_PROYECTO.md` actualizado con los cambios. |
+| 8 | Comentarios | Desviaciones del plan, decisiones y riesgos anotados en §7. |
+| 9 | Commit | Permiso del propietario pedido para el commit de punto de control; hash anotado en §7. |
+
 ### 3.1 Guía de estilo
 - Inglés para nombres, comentarios, docstrings y logs. Frases habladas solo en `domain/phrases.py` y `domain/tank_phrases.py`.
 - `from __future__ import annotations` y type hints en todas las firmas públicas.
@@ -460,3 +477,56 @@ de arriba, tras desplegar el código (por `scp`/SFTP) y reiniciar el servicio co
 7. `http://<IP>:8765/` muestra el panel; `/api/rainwater-tank/current-level` devuelve el JSON con `distance_cm`, `fill_percentage`, `measured_at_unix_seconds`.
 8. Con el servicio de avisos en marcha: `python -m jarvis.cli.announce --base64 $(echo -n "Prueba de aviso" | base64)` → se oye y el LED de alerta D12 se enciende durante la locución. Repetir con el shim antiguo `python -m notifications.announcement_client --base64 ...`.
 9. Botón D2 (último, apaga la Pi): corta lo que esté sonando, dice el aviso de apagado y apaga.
+
+---
+
+## 7. Registro de ejecución
+
+Al terminar cada fase, marca su columna en la matriz (☑ cumplido, ✖ fallo, — no aplica) y anota
+en la tabla de comentarios cualquier incidencia. Si todo ha ido bien, escribe «Sin incidencias».
+
+**Fecha de inicio:** ____ · **Ejecutado por (modelo):** ____
+
+### 7.1 Matriz de control
+
+| Punto de control | F0 | F1 | F2 | F3 | F4 | F5 | F6 | F7 |
+| --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| Pasos de la fase completados (§3.2, punto 1) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Tests en Windows: nº tests / skips (§3.2, punto 2) | ____ | ____ | ____ | ____ | ____ | ____ | ____ | ____ |
+| `compileall` OK (§3.2, punto 3) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| `test_import_case` pasa (§3.2, punto 4) | — | — | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| `git status` revisado (§3.2, punto 5) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Textos y frases idénticos (§3.2, punto 6) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| `CONTEXTO_DEL_PROYECTO.md` actualizado (§3.2, punto 7) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Commit de punto de control aprobado (§3.2, punto 9) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Secretos fuera de Git (`git ls-files`) | — | ☐ | — | — | — | — | — | — |
+| Subpasos 3.1 a 3.7 completados | — | — | — | ☐ | — | — | — | — |
+| Comparación línea a línea con `core/conversation.py` | — | — | — | — | — | ☐ | — | — |
+| Orden de intenciones igual que el original | — | — | — | — | — | ☐ | — | — |
+| Orden de arranque igual que `main.py` original | — | — | — | — | — | — | ☐ | — |
+| Shims de `notifications/` probados en Windows | — | — | — | — | — | — | ☐ | — |
+| `rg` de la Fase 7 sin resultados | — | — | — | — | — | — | — | ☐ |
+| `ARDUINO/arduino_mega_connection.py` eliminado; `ARDUINO/main.cs` intacto | — | — | — | — | — | — | — | ☐ |
+
+### 7.2 Comentarios e incidencias
+
+| Fase | Comentarios | Hash del commit |
+| --- | --- | --- |
+| 0 — Red de seguridad | | |
+| 1 — Limpieza y secretos | | |
+| 2 — Paquete `jarvis/`: config, dominio y puertos | | |
+| 3 — Infraestructura | | |
+| 4 — Aplicación: hilos, depósito, botones y memoria | | |
+| 5 — Conversación (riesgo alto) | | |
+| 6 — Arranque, servicio de avisos y entrada | | |
+| 7 — Retirar lo antiguo y documentación | | |
+
+### 7.3 Pendientes del propietario (§5)
+
+| Pendiente | Hecho | Comentarios |
+| --- | :-: | --- |
+| Rotación de tokens y contraseñas | ☐ | |
+| Ruta real y `ExecStart` del servicio confirmados en la Raspberry | ☐ | |
+| Unidad de avisos y llamador de Vento cambiados a `jarvis.*` | ☐ | |
+| `pip freeze` fijado en `requirements.txt` | ☐ | |
+| Arranque en la Raspberry verificado (§6, lista de 9 puntos) | ☐ | |
