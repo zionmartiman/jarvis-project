@@ -5,7 +5,11 @@ import tempfile
 import threading
 import unittest
 
-from core.memory import ConversationMemory, JsonlMemoryBackend, MemoryEntry
+from jarvis.application.memory.conversation_memory import ConversationMemory
+from jarvis.application.memory.summary_prompt import build_summary_prompt
+from jarvis.domain.conversation import ChatMessage, Role
+from jarvis.infrastructure.memory.jsonl_backend import JsonlMemoryBackend
+from jarvis.ports.memory import MemoryEntry
 
 
 class ConversationMemoryTest(unittest.TestCase):
@@ -40,16 +44,26 @@ class ConversationMemoryTest(unittest.TestCase):
 
         context = ConversationMemory(self.backend, summarizer=None).get_context()
 
-        self.assertEqual(len(context), 11)
-        self.assertEqual(context[0], {"role": "summary", "text": "Le gusta el té."})
-        self.assertEqual(context[1]["text"], "pregunta 2")
-        self.assertEqual(context[-1]["text"], "respuesta 6")
+        self.assertEqual(context.summary, "Le gusta el té.")
+        self.assertEqual(len(context.messages), 10)
+        self.assertEqual(context.messages[0], ChatMessage(Role.USER, "pregunta 2"))
+        self.assertEqual(context.messages[-1], ChatMessage(Role.ASSISTANT, "respuesta 6"))
+
+    def test_context_without_summary_has_none(self) -> None:
+        ConversationMemory(self.backend, summarizer=None).record_exchange("Hola", "Buenas")
+
+        context = ConversationMemory(self.backend, summarizer=None).get_context()
+
+        self.assertIsNone(context.summary)
+        self.assertEqual(
+            context.messages, (ChatMessage(Role.USER, "Hola"), ChatMessage(Role.ASSISTANT, "Buenas"))
+        )
 
     def test_summary_prompt_is_cumulative_and_keeps_topics_separate(self) -> None:
         current_summary = MemoryEntry("t", "summary", "Tema: preferencia por el té.")
         new_message = MemoryEntry("t", "user", "Estoy diseñando un sensor de humedad.")
 
-        prompt = ConversationMemory._build_summary_prompt([current_summary], [new_message])
+        prompt = build_summary_prompt(current_summary.content, [new_message])
 
         self.assertIn("memoria completa y actualizada", prompt)
         self.assertIn("delimitador literal ||", prompt)
@@ -100,7 +114,7 @@ class ConversationMemoryTest(unittest.TestCase):
             recent_interactions=1,
         )
         self.backend.replace_all(entries)
-        with self.assertLogs("core.memory", level=logging.WARNING) as captured:
+        with self.assertLogs("jarvis.application.memory.conversation_memory", level=logging.WARNING) as captured:
             memory._run_background_compaction()
 
         self.assertEqual(self.backend.read_all(), entries)

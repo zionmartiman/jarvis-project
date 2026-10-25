@@ -1,7 +1,5 @@
 import tempfile
 import unittest
-from contextlib import redirect_stdout
-from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -32,9 +30,8 @@ class TankAlertsTest(unittest.TestCase):
         self.addCleanup(monotonic_patch.stop)
 
     def feed(self, *percentages: int) -> None:
-        with redirect_stdout(StringIO()):
-            for percentage in percentages:
-                self.meter._publish(level(percentage))
+        for percentage in percentages:
+            self.meter._monitor.publish(level(percentage))
 
     def statuses(self) -> list[str]:
         return [status for _, status in self.status_alerts]
@@ -85,7 +82,7 @@ class TankAlertsTest(unittest.TestCase):
 
         self.meter._on_fill_level_status_changed = failing_callback
 
-        with self.assertLogs("Sensors.rainwater_tank_meter", level="ERROR"):
+        with self.assertLogs("jarvis.domain.tank", level="ERROR"):
             self.feed(79, 80)
         self.feed(79, 80)
 
@@ -128,7 +125,7 @@ class TankAlertsTest(unittest.TestCase):
         self.meter._on_fill_level_changed = failing_callback
 
         self.feed(50)
-        with self.assertLogs("Sensors.rainwater_tank_meter", level="ERROR"):
+        with self.assertLogs("jarvis.domain.tank", level="ERROR"):
             self.feed(56)
         self.feed(56)
 

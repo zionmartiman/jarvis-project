@@ -1,7 +1,5 @@
 import tempfile
 import unittest
-from contextlib import redirect_stdout
-from io import StringIO
 from pathlib import Path
 
 from Sensors.rainwater_tank_meter import RainwaterTankLevel, RainwaterTankMeter
@@ -20,15 +18,15 @@ class RainwaterTankMeterTest(unittest.TestCase):
             )
             first_level = RainwaterTankLevel(23.3, 70, 1.0)
             next_level = RainwaterTankLevel(18.0, 85, 2.0)
-            output = StringIO()
 
-            with redirect_stdout(output):
-                meter._publish(first_level)
-                meter._publish(next_level)
+            with self.assertLogs("jarvis.application.tank_monitor", level="INFO") as captured:
+                meter._monitor.publish(first_level)
+                meter._monitor.publish(next_level)
 
-            self.assertEqual(output.getvalue().splitlines(), [
-                "Rainwater tank distance: 23.3 cm | fill level: 70%",
-            ])
+            self.assertEqual(
+                [record.getMessage() for record in captured.records],
+                ["Rainwater tank distance: 23.3 cm | fill level: 70%"],
+            )
             self.assertEqual(meter.latest_level(), next_level)
             self.assertEqual(percentage_notifications, [next_level])
             self.assertEqual(status_notifications, [(next_level, "good")])

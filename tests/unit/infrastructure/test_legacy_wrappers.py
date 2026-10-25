@@ -2,7 +2,6 @@
 
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 from bridge.legacy_context import history_to_context
 from Indicators.arduino_rgb_indicator import ArduinoRgbIndicator
@@ -65,13 +64,8 @@ class ArduinoButtonMonitorTest(unittest.TestCase):
             on_response_interrupt_pressed=lambda: calls.append("interrupt"),
         )
 
-        def stop_when_script_is_exhausted(interval: float) -> bool:
-            if not serial.responses:
-                monitor._stop_monitoring.set()
-            return monitor._stop_monitoring.is_set()
-
-        with patch("builtins.print"), patch.object(monitor._stop_monitoring, "wait", stop_when_script_is_exhausted):
-            monitor._monitor_buttons()
+        for _ in range(3):
+            monitor._monitor.poll_once()
 
         self.assertEqual(calls, ["shutdown", "interrupt"])
 
