@@ -1,3 +1,4 @@
+# Pin versions with "pip freeze" on the Raspberry Pi
 azure-cognitiveservices-speech
 sounddevice
 vosk
