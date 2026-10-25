@@ -1,5 +1,7 @@
 # Plan e implementación: memoria de conversación
 
+> **Nota (refactor):** las rutas de este documento son anteriores a la reestructuración en el paquete `jarvis/`. Equivalencias: `core/conversation.py` → `jarvis/application/conversation/`; `core/memory.py` → `jarvis/application/memory/conversation_memory.py` (+ `jarvis/infrastructure/memory/jsonl_backend.py`); `core/intents.py` → `jarvis/domain/intents.py`; `config/settings.py` → `jarvis/config/settings.py`; `bridge/gemini_bridge.py` → `jarvis/infrastructure/assistants/gemini.py`; `bridge/vento_bridge.py` → `jarvis/infrastructure/assistants/vento.py`; `system.md` → `prompts/system.md`; los tests están en `tests/unit/`. Los módulos nuevos que se creen deben respetar las capas descritas en `docs/CONTEXTO_DEL_PROYECTO.md` («Arquitectura por capas»).
+
 ## Objetivo y alcance
 
 La memoria guarda conversaciones de Jarvis en el dispositivo, reinyecta una síntesis duradera y limita el historial de Gemini a cinco interacciones completas. La versión implementada usa únicamente la biblioteca estándar para almacenamiento, concurrencia y serialización; reutiliza el puente REST Gemini ya presente para sintetizar recuerdos. Vento conserva el historial de sesión que ya recibía.

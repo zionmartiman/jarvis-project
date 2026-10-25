@@ -27,12 +27,12 @@ jarvis-service status jarvis-voice
 ## Ver logs
 
 ```bash
-tail -f /home/jarvis/jarvis-voice/jarvis-voice.log
+tail -f /home/jarvis/jarvis-project/jarvis-voice.log
 ```
 
 ## Frases reservadas
 
-La lista autoritativa está en [core/intents.py](../core/intents.py). Se comparan sin mayúsculas, tildes ni signos.
+La lista autoritativa está en [jarvis/domain/intents.py](../jarvis/domain/intents.py). Se comparan sin mayúsculas, tildes ni signos.
 
 **Dejar de escuchar** (vuelve a esperar «Jarvis»):
 «buenas noches», «pausar», «pausate», «pausar conversacion», «espera», «esperate», «descansa».

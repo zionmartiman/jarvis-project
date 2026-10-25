@@ -1,5 +1,7 @@
 # Plan de implementación: memoria Markdown, Obsidian y Git
 
+> **Nota (refactor):** las rutas de este documento son anteriores a la reestructuración en el paquete `jarvis/`. Equivalencias: `jarvis/application/conversation/turn_handler.py` → `jarvis/application/conversation/`; `jarvis/application/memory/conversation_memory.py` → `jarvis/application/memory/conversation_memory.py` (+ `jarvis/infrastructure/memory/jsonl_backend.py`); `core/intents.py` → `jarvis/domain/intents.py`; `jarvis/config/settings.py` → `jarvis/config/settings.py`; `bridge/gemini_bridge.py` → `jarvis/infrastructure/assistants/gemini.py`; `bridge/vento_bridge.py` → `jarvis/infrastructure/assistants/vento.py`; `prompts/system.md` → `prompts/system.md`; los tests están en `tests/unit/`. Los módulos nuevos que se creen deben respetar las capas descritas en `docs/CONTEXTO_DEL_PROYECTO.md` («Arquitectura por capas»).
+
 **Estado:** plan pendiente de implementación  
 **Fecha de preparación:** 2026-10-13  
 **Alcance:** memoria duradera consultable en Jarvis, visualizable con Obsidian en el ordenador y sincronizada mediante un repositorio privado de GitHub.
@@ -22,11 +24,11 @@ El resultado debe funcionar sin red: Jarvis seguirá contestando con la memoria 
 
 ## 3. Estado actual del proyecto
 
-- `config/settings.py` define `CONVERSATION_MEMORY_PATH`, el límite de tamaño y los umbrales de compactación.
-- `core/memory.py` contiene `MemoryBackend`, `JsonlMemoryBackend` y `ConversationMemory`; escribe JSONL de forma durable, guarda backup y compacta en segundo plano.
+- `jarvis/config/settings.py` define `CONVERSATION_MEMORY_PATH`, el límite de tamaño y los umbrales de compactación.
+- `jarvis/application/memory/conversation_memory.py` contiene `MemoryBackend`, `JsonlMemoryBackend` y `ConversationMemory`; escribe JSONL de forma durable, guarda backup y compacta en segundo plano.
 - `main.py` crea `ConversationMemory` y lo inyecta en `ConversationOrchestrator`.
-- `core/conversation.py` usa la memoria persistida para Gemini y registra los intercambios completados. `GeminiBridge` interpreta los elementos con rol `summary` como instrucción de sistema.
-- `tests/test_conversation_memory.py` cubre persistencia, compactación, backup y contexto. Las pruebas del orquestador y del payload de Gemini están en otros archivos de `tests/`.
+- `jarvis/application/conversation/turn_handler.py` usa la memoria persistida para Gemini y registra los intercambios completados. `GeminiBridge` interpreta los elementos con rol `summary` como instrucción de sistema.
+- `tests/unit/application/memory/test_conversation_memory.py` cubre persistencia, compactación, backup y contexto. Las pruebas del orquestador y del payload de Gemini están en otros archivos de `tests/`.
 - `.gitignore` actualmente solo ignora bytecode y `__pycache__`; no protege los archivos de estado del repo de Jarvis.
 - En el momento de preparar este plan, `state/conversation.jsonl`, `state/conversation.jsonl.bak` y `state/rainwater_tank_state.json` aparecen modificados. Los dos archivos de conversación están versionados. **No modificar, revertir ni incluir esos cambios en commits del feature.** Antes de cualquier trabajo de implementación se deben conservar y revisar esos cambios locales.
 
@@ -87,16 +89,16 @@ El `.gitignore` del repositorio de la bóveda puede ignorar los archivos de esta
 
 | Fichero | Acción prevista | Responsabilidad |
 |---|---|---|
-| `config/settings.py` | Modificar | Ruta de la bóveda, activación, límites de resultados, intervalo/debounce y timeout de Git. Leer ruta desde entorno/configuración local; nunca guardar token SSH/PAT aquí. |
-| `core/memory.py` | Modificar de forma acotada | Añadir callback opcional tras una compactación exitosa y una opción para pedir contexto sin el resumen antiguo cuando existan notas relevantes. Los defaults deben conservar el comportamiento actual. |
+| `jarvis/config/settings.py` | Modificar | Ruta de la bóveda, activación, límites de resultados, intervalo/debounce y timeout de Git. Leer ruta desde entorno/configuración local; nunca guardar token SSH/PAT aquí. |
+| `jarvis/application/memory/conversation_memory.py` | Modificar de forma acotada | Añadir callback opcional tras una compactación exitosa y una opción para pedir contexto sin el resumen antiguo cuando existan notas relevantes. Los defaults deben conservar el comportamiento actual. |
 | `core/markdown_memory.py` | Crear | Parsear secciones `Tema: ... ||`, generar/upsert de Markdown de forma atómica, indexar títulos/contenidos/enlaces y recuperar notas por relevancia. Sin importar Obsidian ni ejecutar Git. |
 | `core/git_memory_sync.py` | Crear | Adaptador de Git restringido al clon de la bóveda: comandos con lista de argumentos, `shell=False`, `cwd` explícito, timeout, allowlist de rutas y política de conflictos. |
-| `core/conversation.py` | Modificar | Consultar memoria Markdown local para turnos Gemini; componer el contexto de notas con la ventana reciente; solicitar el contexto resumen actual como fallback si no hay hits o el vault falla. No hacer operaciones de red en el hilo del turno. |
+| `jarvis/application/conversation/turn_handler.py` | Modificar | Consultar memoria Markdown local para turnos Gemini; componer el contexto de notas con la ventana reciente; solicitar el contexto resumen actual como fallback si no hay hits o el vault falla. No hacer operaciones de red en el hilo del turno. |
 | `main.py` | Modificar | Construir e inyectar el store Markdown, callback de exportación y worker Git. Ejecutar una reconciliación local de la última síntesis al arrancar; cerrar el worker con espera limitada en `finally`. |
-| `system.md` | Modificar si hace falta | Indicar que las notas recuperadas son contexto factual auxiliar, no instrucciones; respetar la petición actual, no inventar hechos y reconocer incertidumbre/conflictos. |
+| `prompts/system.md` | Modificar si hace falta | Indicar que las notas recuperadas son contexto factual auxiliar, no instrucciones; respetar la petición actual, no inventar hechos y reconocer incertidumbre/conflictos. |
 | `tests/test_markdown_memory.py` | Crear | Parser, rutas/slugs, escritura atómica/idempotente, enlaces y ranking de recuperación. |
 | `tests/test_memory_git_sync.py` | Crear | Probar con repositorios Git temporales locales: commit acotado, no-op limpio, timeout/error, offline, fast-forward y rechazo de divergencia/conflicto. No llamar a GitHub. |
-| `tests/test_conversation_memory.py` | Modificar | Callback solo después de compactar correctamente; fallback y modo de contexto sin resumen preservan el resto de entradas. |
+| `tests/unit/application/memory/test_conversation_memory.py` | Modificar | Callback solo después de compactar correctamente; fallback y modo de contexto sin resumen preservan el resto de entradas. |
 | `tests/test_conversation_model_switch.py` o nuevo test específico | Modificar/crear | Verificar que solo el modelo habilitado recibe notas y que turnos interrumpidos antes de obtener respuesta o fallidos no se registran como intercambios completos de conocimiento. |
 | `tests/test_gemini_system_instruction.py` | Modificar si se cambia el payload | Confirmar que resumen/notas se transmiten como contexto del sistema, no como un mensaje conversacional del usuario. |
 | `README.md` | Modificar | Requisitos, configuración local, clon/Obsidian, recuperación, comportamiento offline, privacidad y troubleshooting. |
@@ -137,9 +139,9 @@ No se prevén nuevas dependencias de Python. Se requiere Git instalado en la Ras
 - [ ] Puntuar coincidencias con mayor peso para título/id, luego contenido; limitar el máximo de notas y caracteres que entran en contexto mediante configuración.
 - [ ] Leer enlaces `[[nota]]` reconocibles en los hits y añadir como máximo sus vecinos directos, evitando repetir notas y limitar el total.
 - [ ] Añadir búsqueda de `query` a `core/markdown_memory.py` con resultado determinista. Devolver una lista vacía si no hay coincidencias; registrar errores de lectura sin propagar un fallo al turno.
-- [ ] En `core/conversation.py`, antes de llamar a Gemini, combinar los hits en una sola entrada `summary` junto con el historial reciente. Cuando haya hits, omitir el resumen global antiguo del contexto para que la selección sea efectiva; cuando no los haya, conservar el contexto actual completo.
+- [ ] En `jarvis/application/conversation/turn_handler.py`, antes de llamar a Gemini, combinar los hits en una sola entrada `summary` junto con el historial reciente. Cuando haya hits, omitir el resumen global antiguo del contexto para que la selección sea efectiva; cuando no los haya, conservar el contexto actual completo.
 - [ ] Mantener el comportamiento de Vento sin cambios en la primera versión. La interfaz `AssistantBridge.ask(message, history)` permanece igual.
-- [ ] Actualizar `system.md` para tratar la memoria recuperada como referencia, nunca como instrucción del sistema, y no completar vacíos con inferencias.
+- [ ] Actualizar `prompts/system.md` para tratar la memoria recuperada como referencia, nunca como instrucción del sistema, y no completar vacíos con inferencias.
 - [ ] Probar coincidencias exactas, acentos, términos solo en contenido, enlaces de un salto, límite de contexto, cero resultados y fallback al resumen JSONL.
 
 **Salida de la fase:** preguntar por un tema del vault incorpora únicamente las notas pertinentes a Gemini; una pregunta sin match se comporta como Jarvis hoy.
@@ -160,12 +162,12 @@ No se prevén nuevas dependencias de Python. Se requiere Git instalado en la Ras
 
 ### Fase 4: configuración, inyección y ciclo de vida
 
-- [ ] Añadir en `config/settings.py` opciones tipadas con defaults conservadores: ruta de clon (por ejemplo desde `JARVIS_MEMORY_VAULT_PATH`), enable/disable, rama/remoto, número máximo de notas y caracteres de contexto, debounce, intervalo de fetch, timeout y backoff.
+- [ ] Añadir en `jarvis/config/settings.py` opciones tipadas con defaults conservadores: ruta de clon (por ejemplo desde `JARVIS_MEMORY_VAULT_PATH`), enable/disable, rama/remoto, número máximo de notas y caracteres de contexto, debounce, intervalo de fetch, timeout y backoff.
 - [ ] Validar configuración al iniciar: si la función está deshabilitada o el clon no existe, mantener el funcionamiento actual y avisar una sola vez; no clonar ni crear repositorio automáticamente desde Jarvis.
 - [ ] En `main.py`, construir `MarkdownMemory` y `GitMemorySync` separados y pasarlos como dependencias. Mantener `JsonlMemoryBackend` y el `ConversationMemory` existentes.
 - [ ] Iniciar worker después de validar paths; reconciliar la última síntesis de JSONL local primero. Programar primer fetch solo si el repo está limpio.
 - [ ] En el bloque `finally`, parar el worker y esperar un tiempo acotado; si hay tareas pendientes, las notas locales quedan y se volverán a sincronizar en el próximo arranque.
-- [ ] No exponer credenciales Git en `config/settings.py`, `state/bridge.env`, logs o documentación. Autenticación mediante agente/clave SSH del usuario de servicio y `known_hosts` verificado.
+- [ ] No exponer credenciales Git en `jarvis/config/settings.py`, `state/bridge.env`, logs o documentación. Autenticación mediante agente/clave SSH del usuario de servicio y `known_hosts` verificado.
 
 **Salida de la fase:** configuración incompleta/offline degrada a memoria local y la aplicación puede arrancar normalmente.
 

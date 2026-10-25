@@ -1,5 +1,7 @@
 # Plan: instrucciones de sistema para Gemini en Jarvis
 
+> **Nota (refactor):** las rutas de este documento son anteriores a la reestructuración en el paquete `jarvis/`. Equivalencias: `core/conversation.py` → `jarvis/application/conversation/`; `core/memory.py` → `jarvis/application/memory/conversation_memory.py` (+ `jarvis/infrastructure/memory/jsonl_backend.py`); `core/intents.py` → `jarvis/domain/intents.py`; `config/settings.py` → `jarvis/config/settings.py`; `bridge/gemini_bridge.py` → `jarvis/infrastructure/assistants/gemini.py`; `bridge/vento_bridge.py` → `jarvis/infrastructure/assistants/vento.py`; `system.md` → `prompts/system.md`; los tests están en `tests/unit/`. Los módulos nuevos que se creen deben respetar las capas descritas en `docs/CONTEXTO_DEL_PROYECTO.md` («Arquitectura por capas»).
+
 ## Objetivo
 
 Hacer que Gemini reciba un texto base de instrucciones al iniciar la conversación, para que siempre responda con el comportamiento esperado de Jarvis: español, tono de voz, límites de seguridad, reglas de servicio, y manejo del contexto del asistente doméstico.
@@ -8,7 +10,7 @@ Hacer que Gemini reciba un texto base de instrucciones al iniciar la conversaci�
 
 ### 1) Cómo se integra Gemini en este proyecto ahora
 
-El puente actual en [bridge/gemini_bridge.py](../bridge/gemini_bridge.py) construye una llamada REST a:
+El puente actual en [jarvis/infrastructure/assistants/gemini.py](../../jarvis/infrastructure/assistants/gemini.py) construye una llamada REST a:
 
 ```python
 https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
@@ -107,7 +109,7 @@ def load_system_prompt() -> str:
 
 ### Fase 2: inyectarlo en el puente Gemini
 
-Modificar [bridge/gemini_bridge.py](../bridge/gemini_bridge.py) para que el constructor reciba el texto del system prompt.
+Modificar [jarvis/infrastructure/assistants/gemini.py](../../jarvis/infrastructure/assistants/gemini.py) para que el constructor reciba el texto del system prompt.
 
 Pseudocódigo:
 
@@ -137,7 +139,7 @@ if self._system_prompt:
 
 ### Fase 3: conectar la carga desde arranque
 
-En [main.py](../main.py) o en la fábrica de puentes, pasar el contenido del archivo al constructor de `GeminiBridge`:
+En [main.py](../../main.py) o en la fábrica de puentes, pasar el contenido del archivo al constructor de `GeminiBridge`:
 
 ```python
 from config.settings import load_gemini_credentials

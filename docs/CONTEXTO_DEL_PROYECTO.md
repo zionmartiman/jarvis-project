@@ -105,11 +105,11 @@ El mapeo del orquestador y el firmware versionados es:
 
 El azul sube y baja con una semionda de un segundo; el amarillo cambia de estado cada 125 ms. Al detectar «Jarvis», primero se reproduce el acuse «Dime» (estado de voz/amarillo) y luego se abre la escucha de la instrucción (verde). Al terminar una instrucción, el estado pasa a azul mientras se consulta al agente; al reproducir la respuesta vuelve a amarillo.
 
-«Descansa» y otras frases reservadas terminan la conversación activa y devuelven el programa a espera de «Jarvis»; no detienen el proceso. También existen frases para solicitar apagado o reinicio, con confirmación hablada. La implementación de las frases está en [core/intents.py](core/intents.py), y las acciones de sistema en [jarvis/infrastructure/system/power_controller.py](jarvis/infrastructure/system/power_controller.py). Apagar/reiniciar depende de que el sistema operativo permita `sudo -n` para esos comandos.
+«Descansa» y otras frases reservadas terminan la conversación activa y devuelven el programa a espera de «Jarvis»; no detienen el proceso. También existen frases para solicitar apagado o reinicio, con confirmación hablada. La implementación de las frases está en [jarvis/domain/intents.py](jarvis/domain/intents.py), y las acciones de sistema en [jarvis/infrastructure/system/power_controller.py](jarvis/infrastructure/system/power_controller.py). Apagar/reiniciar depende de que el sistema operativo permita `sudo -n` para esos comandos.
 
 ### Botones físicos
 
-Ambos pulsadores se sondean independientemente del medidor mediante [system/arduino_button_monitor.py](system/arduino_button_monitor.py). El monitor consulta `BUTTON STATUS` al Arduino cada 0,1 segundos; el firmware responde `BUTTON_SHUTDOWN` para el botón de D2, `BUTTON_INTERRUPT` para el botón de D3 y `BUTTON_IDLE` cuando no hay una pulsación pendiente. Las dos entradas tienen antirrebote y detección de flanco en [ARDUINO/main.cs](ARDUINO/main.cs).
+Ambos pulsadores se sondean independientemente del medidor mediante [jarvis/application/button_monitor.py](jarvis/application/button_monitor.py) (`ButtonMonitor`) y [jarvis/infrastructure/arduino/button_panel.py](jarvis/infrastructure/arduino/button_panel.py). El monitor consulta `BUTTON STATUS` al Arduino cada 0,1 segundos; el firmware responde `BUTTON_SHUTDOWN` para el botón de D2, `BUTTON_INTERRUPT` para el botón de D3 y `BUTTON_IDLE` cuando no hay una pulsación pendiente. Las dos entradas tienen antirrebote y detección de flanco en [ARDUINO/main.cs](ARDUINO/main.cs).
 
 El botón de D2 activa el apagado maestro en cualquier fase: detiene la captura del micrófono, interrumpe la síntesis/reproducción activa de Azure y `aplay`, anuncia «Apagado manual accionado!, apagando sistemas. Venga, chao!» y llama a `poweroff`. Las operaciones para interrumpir el audio están en [jarvis/infrastructure/speech/azure_synthesizer.py](jarvis/infrastructure/speech/azure_synthesizer.py) y [jarvis/infrastructure/audio/playback.py](jarvis/infrastructure/audio/playback.py).
 
@@ -172,6 +172,8 @@ En ese documento la clave de dispositivo está sustituida por el marcador `<DEVI
 
 ## Configuración y credenciales
 
+Carpeta del proyecto en la Raspberry: `/home/jarvis/jarvis-project` (la misma que usan `.vscode/sftp.example.json` y `scripts/hacer pull desde la raspberry.bat`). El servicio de systemd y el directorio de credenciales conservan el nombre `jarvis-voice` (`~/.config/jarvis-voice/`, definido en `jarvis/config/settings.py`). Debe confirmarse con `pwd` y con `ExecStart` del servicio.
+
 | Integración | Ruta/valor por defecto | Contenido esperado |
 | --- | --- | --- |
 | Azure Speech | `~/.config/jarvis-voice/azure.env` | `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` |
@@ -199,8 +201,8 @@ Las rutas, dispositivo de audio, puerto serie, modelo Gemini, voz Azure, interva
 
 Estos puntos afectan a la diferencia entre el repositorio y la instalación descrita; no se han validado en hardware ni en servicios externos:
 
-1. **Capitalización de import Arduino:** desde la Fase 3 el código ya no importa `Arduino.arduino_mega_connection` (el cliente serie vive en `jarvis/infrastructure/arduino/serial_connection.py`), así que el arranque ya no puede fallar por la carpeta `ARDUINO`. El fichero original `ARDUINO/arduino_mega_connection.py` sigue en el repositorio, sin usar, hasta la Fase 7. Pendiente de comprobar en la Raspberry: que el arranque con el código nuevo funciona (sobre todo los sockets Unix del LED de alerta y de los avisos, que no se pueden probar en Windows).
-2. **Proceso de avisos:** confirmar que `python -m jarvis.services.announcement_service` (o una unidad de servicio equivalente; el antiguo `python -m notifications.announcement_service` sigue funcionando como shim) se inicia junto a Jarvis. `main.py` no lo inicia.
+1. **Arranque con el código nuevo:** el cliente serie vive en `jarvis/infrastructure/arduino/serial_connection.py`; la carpeta `ARDUINO/` solo contiene el firmware (`ARDUINO/main.cs`) y el antiguo `ARDUINO/arduino_mega_connection.py` se borró en la Fase 7. Pendiente de comprobar en la Raspberry: que el arranque con el código nuevo funciona (sobre todo los sockets Unix del LED de alerta y de los avisos, que no se pueden probar en Windows).
+2. **Proceso de avisos:** confirmar que `python -m jarvis.services.announcement_service` (o una unidad de servicio equivalente; el antiguo `python -m notifications.announcement_service` sigue funcionando como shim deprecado hasta que la unidad se migre) se inicia junto a Jarvis. `main.py` no lo inicia.
 3. **Alertas de Vento:** identificar el proceso/configuración desplegados que reciben notificaciones de Vento y llaman al cliente de avisos. No aparecen en el flujo Python del repositorio inspeccionado.
 4. **LED de alerta:** contrastar el montaje físico y la versión desplegada del firmware con la declaración roja de D12.
 5. **Parámetros físicos:** confirmar que el sensor está instalado y que 80 cm/9 cm y la capacidad estimada de 1000 litros corresponden al depósito real.
@@ -210,15 +212,15 @@ Estos puntos afectan a la diferencia entre el repositorio y la instalación desc
 ## Mapa de código
 
 - Arranque: [main.py](main.py) (solo llama a `run()`), [jarvis/bootstrap/app.py](jarvis/bootstrap/app.py) (`Application`, `build_application`, `run`), [jarvis/bootstrap/assistants.py](jarvis/bootstrap/assistants.py) (`build_assistant`, `build_memory_summarizer`) y [jarvis/bootstrap/logging_setup.py](jarvis/bootstrap/logging_setup.py)
-- Orquestación, selección del agente y estados: [jarvis/application/conversation/](jarvis/application/conversation/) (`ConversationOrchestrator` y las clases que usa). El antiguo [core/conversation.py](core/conversation.py) sigue en el repositorio, sin usar, hasta la Fase 7
-- Persistencia y recuperación de memoria conversacional: [jarvis/application/memory/conversation_memory.py](jarvis/application/memory/conversation_memory.py) (fachada antigua con contexto `list[dict]` en [core/memory.py](core/memory.py))
-- Comandos reservados: [core/intents.py](core/intents.py)
-- Configuración y carga de credenciales: [jarvis/config/](jarvis/config/) (el antiguo [config/settings.py](config/settings.py) solo lo usan las fachadas antiguas)
+- Orquestación, selección del agente y estados: [jarvis/application/conversation/](jarvis/application/conversation/) (`ConversationOrchestrator` y las clases que usa).
+- Persistencia y recuperación de memoria conversacional: [jarvis/application/memory/conversation_memory.py](jarvis/application/memory/conversation_memory.py)
+- Comandos reservados: [jarvis/domain/intents.py](jarvis/domain/intents.py) y frases habladas en [jarvis/domain/phrases.py](jarvis/domain/phrases.py)
+- Configuración y carga de credenciales: [jarvis/config/](jarvis/config/)
 - Captura y reconocimiento local: [jarvis/infrastructure/audio/microphone.py](jarvis/infrastructure/audio/microphone.py), [jarvis/infrastructure/speech/vosk_recognizer.py](jarvis/infrastructure/speech/vosk_recognizer.py)
-- Puentes Gemini y Vento: [bridge/gemini_bridge.py](bridge/gemini_bridge.py) y [bridge/vento_bridge.py](bridge/vento_bridge.py) (fachadas con la firma antigua `history: list[dict]`); el trabajo lo hacen `gemini.py`, `vento.py` y `vento_reply_parser.py` en [jarvis/infrastructure/assistants/](jarvis/infrastructure/assistants/)
+- Puentes Gemini y Vento: `gemini.py`, `vento.py` y `vento_reply_parser.py` en [jarvis/infrastructure/assistants/](jarvis/infrastructure/assistants/)
 - Síntesis Azure y reproducción: [jarvis/infrastructure/speech/azure_synthesizer.py](jarvis/infrastructure/speech/azure_synthesizer.py), [jarvis/infrastructure/audio/playback.py](jarvis/infrastructure/audio/playback.py)
-- Monitor de botones físicos: [jarvis/application/button_monitor.py](jarvis/application/button_monitor.py) (`ButtonMonitor`); fachada antigua [system/arduino_button_monitor.py](system/arduino_button_monitor.py)
-- Indicadores y medidor: [Indicators/arduino_rgb_indicator.py](Indicators/arduino_rgb_indicator.py) (fachada sobre `ArduinoStatusLight`, `ArduinoAlertLight` y `AlertLightControlServer`), [jarvis/application/tank_monitor.py](jarvis/application/tank_monitor.py) (`TankMonitor`; fachada antigua [Sensors/rainwater_tank_meter.py](Sensors/rainwater_tank_meter.py))
+- Monitor de botones físicos: [jarvis/application/button_monitor.py](jarvis/application/button_monitor.py) (`ButtonMonitor`)
+- Indicadores y medidor: `ArduinoStatusLight` y `ArduinoAlertLight` en [jarvis/infrastructure/arduino/](jarvis/infrastructure/arduino/), [jarvis/application/tank_monitor.py](jarvis/application/tank_monitor.py) (`TankMonitor`) y la lógica de avisos en [jarvis/domain/tank.py](jarvis/domain/tank.py)
 - Adaptadores Arduino: [jarvis/infrastructure/arduino/](jarvis/infrastructure/arduino/)
 - Sockets Unix (LED de alerta y avisos): [jarvis/infrastructure/ipc/](jarvis/infrastructure/ipc/)
 - Panel web: [jarvis/infrastructure/web/tank_web_server.py](jarvis/infrastructure/web/tank_web_server.py) y [jarvis/infrastructure/web/static/rainwater_tank.html](jarvis/infrastructure/web/static/rainwater_tank.html); receptor de avisos: [jarvis/services/announcement_service.py](jarvis/services/announcement_service.py) y CLI [jarvis/cli/announce.py](jarvis/cli/announce.py) (shims deprecados en [notifications/](notifications/))
@@ -227,13 +229,32 @@ Estos puntos afectan a la diferencia entre el repositorio y la instalación desc
 - Control de energía: [jarvis/infrastructure/system/power_controller.py](jarvis/infrastructure/system/power_controller.py)
 - Memoria JSONL y estado del depósito: [jarvis/infrastructure/memory/jsonl_backend.py](jarvis/infrastructure/memory/jsonl_backend.py), [jarvis/infrastructure/tank/state_file.py](jarvis/infrastructure/tank/state_file.py)
 
-## Refactor planificado
+## Arquitectura por capas
 
-Existe un plan de refactor y reestructuración en [docs/PLAN_REFACTOR.md](PLAN_REFACTOR.md): paquete único `jarvis/` por capas, limpieza de backups y código muerto, retirada de secretos de Git y corrección de los tests que fallan. Ejecutadas hasta ahora: **Fase 0** (red de seguridad: tests de caracterización y arreglo de los 3 tests rotos), **Fase 1** (limpieza de backups y código muerto, secretos fuera de Git, documentación movida) **Fase 2** (nuevo paquete `jarvis/` con configuración, dominio y puertos), **Fase 3** (adaptadores de infraestructura), **Fase 4** (capa de aplicación: hilos de fondo, depósito, botones y memoria) **Fase 5** (conversación dividida en clases pequeñas) y **Fase 6** (arranque en `jarvis/bootstrap/`, servicio de avisos y CLI en `jarvis/services/` y `jarvis/cli/`, `prompts/system.md`). Solo falta la Fase 7. Desde la Fase 6 `main.py` arranca el grafo nuevo (ver «Arranque, servicio de avisos y entrada (Fase 6)»); los paquetes antiguos (`core/`, `bridge/`, `Indicators/`, `Sensors/`, `system/`, `config/`, `audio/`, `speech/`) siguen en el repositorio, con sus tests, pero ya no los usa el programa: la Fase 7 los borra.
+El código vive en el paquete `jarvis/`. La regla de dependencias va de fuera hacia dentro y nunca al revés:
+
+```text
+bootstrap  ->  infrastructure  ->  ports  <-  application  ->  domain
+                      +----------------------------------->  domain
+```
+
+- `domain/`: Python puro (datos, enums, reglas y todas las frases habladas); sin I/O ni hilos.
+- `ports/`: interfaces `ABC` que necesita la aplicación (micrófono, reconocedor, sintetizador, asistente, luces, botones, sensor, energía, memoria, avisos, estado del depósito).
+- `application/`: casos de uso (conversación, monitor del depósito, monitor de botones, memoria); solo importa `domain` y `ports` (lo vigila `tests/unit/application/test_layering.py`).
+- `infrastructure/`: implementaciones concretas (Vosk, Azure, Gemini, Vento, Arduino, sockets Unix, HTTP, ficheros).
+- `bootstrap/`: único lugar que conoce las clases concretas y lee la configuración (composition root). Las dependencias llegan siempre por constructor.
+
+Para añadir un proveedor nuevo (por ejemplo otra síntesis de voz) se implementa el puerto correspondiente de `jarvis/ports/` en `jarvis/infrastructure/` y se cambia la construcción en `jarvis/bootstrap/app.py`; la capa de aplicación no se toca.
+
+El firmware de `ARDUINO/main.cs` solo sirve para flashear la placa: Python no lo importa, pero `jarvis/infrastructure/arduino/protocol.py` debe coincidir con los comandos serie que define.
+
+## Refactor ejecutado
+
+El refactor descrito en [docs/PLAN_REFACTOR.md](PLAN_REFACTOR.md) está **completo** (Fases 0 a 7): paquete único `jarvis/` por capas, limpieza de backups y código muerto, secretos fuera de Git, tests corregidos y retirada del código antiguo. Los paquetes `core/`, `bridge/`, `Indicators/`, `Sensors/`, `system/`, `config/`, `audio/` y `speech/`, `webs/` y `ARDUINO/arduino_mega_connection.py` se borraron en la Fase 7; solo quedan `notifications/` (dos shims deprecados) y `ARDUINO/main.cs` (firmware). Los subapartados siguientes describen qué contiene cada capa y las decisiones tomadas en cada fase.
 
 ### Paquete `jarvis/` (Fase 2: configuración, dominio y puertos)
 
-Código puro (sin I/O pesado). El código antiguo solo lo usa de forma parcial (ver Fase 3) y el comportamiento de la Raspberry no cambia:
+Código puro (sin I/O pesado):
 
 - `jarvis/config/`: `env_file.py` (`read_env_file`, quita comillas), `credentials.py` (`AzureCredentials`, `GeminiCredentials`, `VentoCredentials` y sus `load_*`, que reciben la ruta) y `settings.py` (dataclasses inmutables por grupo con los mismos valores actuales y `load_settings(base_dir)`; la raíz del proyecto es `parents[2]` de ese fichero).
 - `jarvis/domain/`: `AssistantStatus`, `AssistantModel` (Gemini/Vento), `ChatMessage`/`ConversationContext`/`ShortTermHistory`, `Intent` + `classify()` + `is_confirmation()`, `phrases.py` y `tank_phrases.py` (todas las frases habladas, en español), y `tank.py` (`TankLevel`, `TankCalibration`, `TankStatus`, `TankAlertPolicy`, que es la lógica de avisos del depósito copiada del medidor actual).
@@ -242,26 +263,19 @@ Código puro (sin I/O pesado). El código antiguo solo lo usa de forma parcial (
 
 ### Infraestructura (Fase 3)
 
-Los adaptadores concretos viven en `jarvis/infrastructure/` y cada uno implementa su puerto. `main.py` (a través de `jarvis/bootstrap/`) los usa desde la Fase 6; los módulos antiguos conservan fachadas sobre ellos hasta la Fase 7.
+Los adaptadores concretos viven en `jarvis/infrastructure/` y cada uno implementa su puerto. `main.py` (a través de `jarvis/bootstrap/`) los usa.
 
-- `arduino/`: `protocol.py` (comandos serie; debe coincidir con `ARDUINO/main.cs`), `serial_connection.py` (`ArduinoSerialConnection`, copia del cliente serie original, y el `Protocol` `SerialRequester`), `status_light.py`, `alert_light.py`, `button_panel.py` y `distance_sensor.py`.
+- `arduino/`: `protocol.py` (comandos serie; debe coincidir con `ARDUINO/main.cs`), `serial_connection.py` (`ArduinoSerialConnection`, antes `ARDUINO/arduino_mega_connection.py`, y el `Protocol` `SerialRequester`), `status_light.py`, `alert_light.py`, `button_panel.py` y `distance_sensor.py`.
 - `ipc/`: `unix_datagram.py` (`UnixDatagramServer`, `send_datagram`), `alert_light_server.py` (`AlertLightControlServer`), `alert_light_client.py` (`AlertLightClient`) y `announcer.py` (`SocketAnnouncer`).
 - `audio/` y `speech/`: `SoundDeviceMicrophone`, `PlaybackLock(lock_path)` + `AplayPcmPlayer`, `VoskSpeechRecognizer` (ya sin `interrupt_event`) y `AzureSpeechSynthesizer` (recibe la ruta del bloqueo de altavoz).
 - `assistants/`: `GeminiAssistant`, `VentoAssistant` y `parse_vento_reply`; reciben un `ConversationContext`. Formato de red, cabeceras y mensajes de error idénticos a los anteriores.
 - `memory/jsonl_backend.py`, `system/power_controller.py` (`SudoPowerController`), `tank/state_file.py` (`JsonTankStateFile`) y `web/tank_web_server.py` (`TankWebServer`, con el panel en `web/static/`).
 
-Cómo conviven con el código antiguo hasta la Fase 7:
-
-- `core/interfaces.py` reexporta `AssistantStatus`, `StatusIndicator`, `AlertLight`, `SpeechRecognizer`, `SpeechSynthesizer` y `SystemController` desde `jarvis`. `AssistantBridge` conserva la firma antigua. `core/memory.py` solo conserva `ConversationMemory` y reexporta el almacenamiento. `config/settings.py` reutiliza `read_env_file` y las credenciales de `jarvis.config`, y añade `PLAYBACK_LOCK_PATH`.
-- `bridge/gemini_bridge.py` y `bridge/vento_bridge.py` son fachadas que convierten el historial antiguo (`list[dict]`) en un `ConversationContext` con `bridge/legacy_context.py` y delegan en los asistentes nuevos.
-- `Indicators/arduino_rgb_indicator.py`, `system/arduino_button_monitor.py` y `Sensors/rainwater_tank_meter.py` mantienen su API pero usan los adaptadores nuevos. Desde la Fase 4 el medidor y el monitor de botones delegan en `TankMonitor` (con `TankAlertPolicy`) y `ButtonMonitor`.
-- `RainwaterTankLevel` es ahora un alias de `TankLevel`. `notifications/announcement_service.py` conservó su propio bucle de socket hasta la Fase 6, que lo sustituyó por `UnixDatagramServer`.
-
-Cambios de comportamiento permitidos por el plan: `SocketAnnouncer` registra un aviso de una línea (sin traceback) si el servicio de avisos no escucha, en lugar de lanzar `OSError`; así, el medidor da por anunciado un aviso aunque el servicio no esté en marcha. Los mensajes de consola de Vosk, el micrófono y el cliente serie pasan a `logging` en inglés, y `main.py` configura `logging.basicConfig` a nivel INFO para que se sigan viendo. Las líneas `Yo:`, `Gemini:` y `Vento:` y los `print` del orquestador, del medidor y del monitor de botones no se han tocado.
+Cambios de comportamiento permitidos por el plan: `SocketAnnouncer` registra un aviso de una línea (sin traceback) si el servicio de avisos no escucha, en lugar de lanzar `OSError`; así, el medidor da por anunciado un aviso aunque el servicio no esté en marcha. Los mensajes de consola de Vosk, el micrófono y el cliente serie pasan a `logging` en inglés (`configure_logging()` los deja visibles a nivel INFO en stdout).
 
 ### Aplicación (Fase 4)
 
-`jarvis/application/` solo importa `jarvis.domain`, `jarvis.ports` y a sí misma (lo comprueba `tests/unit/application/test_layering.py`). Ya la usan los módulos antiguos a través de fachadas:
+`jarvis/application/` solo importa `jarvis.domain`, `jarvis.ports` y a sí misma (lo comprueba `tests/unit/application/test_layering.py`). 
 
 - `periodic_task.py`: `PeriodicTask(name, interval_seconds, action)`, hilo daemon que ejecuta `action` y espera con `Event.wait`. `start()` es idempotente, `close(timeout)` lo detiene y una excepción de `action` se registra y no detiene el bucle.
 - `tank_monitor.py`: `TankMonitor(sensor, calibration, store, alert_policy, poll_interval_seconds)`. `poll_once()` lee la distancia, crea el `TankLevel` (porcentaje con `TankCalibration`), lo guarda como último nivel, lo persiste con el `TankStateStore`, registra solo la primera lectura (`Rainwater tank distance: … cm | fill level: …%`) y se la pasa a `TankAlertPolicy.observe`. `publish(level)` hace lo mismo para un nivel ya medido. Las lecturas no válidas se descartan sin tocar el último nivel.
@@ -269,16 +283,11 @@ Cambios de comportamiento permitidos por el plan: `SocketAnnouncer` registra un 
 - `memory/summary_prompt.py`: `build_summary_prompt(previous_summary, messages)` con el texto exacto del prompt de compactación descrito en «Memoria de conversación».
 - `memory/conversation_memory.py`: `ConversationMemory` con la misma lógica de compactación, bloqueos e hilos que antes. `get_context()` devuelve ahora un `ConversationContext` (`messages` con los últimos cinco intercambios completos y `summary` con el último resumen o `None`), no una lista con un falso mensaje `role: "summary"`.
 
-Cómo conviven con el código antiguo (sin uso desde la Fase 6, se borra en la Fase 7):
-
-- `core/memory.py` es una subclase fina de la `ConversationMemory` nueva que convierte `get_context()` al formato antiguo (`list[dict]` con el resumen como primer elemento `role: "summary"`) que espera el orquestador antiguo.
-- `Sensors/rainwater_tank_meter.py` (`RainwaterTankMeter`) y `system/arduino_button_monitor.py` (`ArduinoButtonMonitor`) mantienen su API pero delegan en `TankMonitor` y `ButtonMonitor`. El medidor usa ya `TankAlertPolicy` (calibración 80/9 cm, cambio mínimo de 5 puntos y 5 s) y traduce `TankStatus` a su valor de texto (`"good"`, …) para los callbacks antiguos.
-
 Cambios de comportamiento permitidos por el plan: la primera lectura del depósito y las pulsaciones de botón se muestran ahora por `logging` en inglés (`Rainwater tank distance: …`, `Button press detected: shutdown|interrupt`) en lugar de los `print` anteriores; el fallo de un aviso del depósito se registra con el logger `jarvis.domain.tank`.
 
 ### Conversación (Fase 5)
 
-`jarvis/application/conversation/` divide `core/conversation.py` en clases pequeñas que reciben sus dependencias por constructor. Desde la Fase 6 son las que ejecuta `main.py` (el grafo se construye en `jarvis/bootstrap/app.py`); `core/conversation.py` ya no se usa. Solo importan `domain`, `ports` y la propia capa de aplicación (lo vigila `test_layering.py`).
+`jarvis/application/conversation/` divide `core/conversation.py` en clases pequeñas que reciben sus dependencias por constructor. Son las que ejecuta `main.py` (el grafo se construye en `jarvis/bootstrap/app.py`); sustituyen al antiguo `core/conversation.py`. Solo importan `domain`, `ports` y la propia capa de aplicación (lo vigila `test_layering.py`).
 
 - `safe_status.py`: `SafeStatusIndicator`, decorador de un `StatusIndicator` que registra y no relanza los fallos (sustituye a `_set_status`).
 - `voice.py`: `Voice` (todo lo que se dice en voz alta). `say()` equivale a `_speak` (nada si se está apagando, bloqueo de voz, estado SPEAKING, silencia el micrófono); `interrupt()` corta la locución registrando errores; `say_last_words()` toma el altavoz interrumpiendo a quien hable y habla aunque se esté apagando.
@@ -293,7 +302,7 @@ Cambios de comportamiento permitidos por el plan: la primera lectura del depósi
 
 Cambios de comportamiento permitidos por el plan: «Cambiando a Gemini.» sustituye a «Cambiar a Gemini.» (activo desde la Fase 6), y los mensajes de error y de estado del orquestador pasan a `logging` en inglés. El aviso «Esperando la palabra «Jarvis»...» pasa a `Waiting for the wake word "Jarvis"`.
 
-`tests/unit/test_import_case.py` compara cada import de `jarvis/`, `main.py` y `tests/` con los nombres reales de ficheros distinguiendo mayúsculas, para detectar en Windows lo que fallaría en la Raspberry. Desde la Fase 3 su lista de excepciones conocidas (`KNOWN_LEGACY_VIOLATIONS`) está vacía, porque `main.py` ya no importa `Arduino`.
+`tests/unit/test_import_case.py` compara cada import de `jarvis/`, `main.py` y `tests/` con los nombres reales de ficheros distinguiendo mayúsculas, para detectar en Windows lo que fallaría en la Raspberry. Su lista de excepciones conocidas (`KNOWN_LEGACY_VIOLATIONS`) está vacía.
 
 ### Arranque, servicio de avisos y entrada (Fase 6)
 
@@ -303,10 +312,16 @@ Cambios de comportamiento permitidos por el plan: «Cambiando a Gemini.» sustit
 - `jarvis/bootstrap/app.py`: `Application(orchestrator, microphone, components)` arranca los componentes (`start()`/`close()`) en orden, entra en `with microphone: orchestrator.run_forever()` y cierra en orden inverso solo los que llegaron a arrancar. `build_application(settings)` conserva el orden de construcción del `main.py` antiguo (credenciales Azure, micrófono, Vosk, Azure, energía, serie, luces, botones D2 → `EmergencyShutdown.trigger` y D3 → `ReplyInterruptGate.request`, depósito, panel web, memoria, orquestador); los componentes se arrancan en este orden: receptor del LED de alerta, botones, depósito, panel web. Los adaptadores que necesitan `sounddevice`, `vosk`, `azure` o `serial` se importan dentro de `build_application`, para poder probar `Application` en Windows. `run()` llama a `configure_logging()`, `load_settings()` y construye y ejecuta la aplicación; con Ctrl+C registra `Jarvis stopped.`.
 - `jarvis/services/announcement_service.py`: `AnnouncementService(synthesizer, alert_light, server_settings)` usa `UnixDatagramServer` y las mismas reglas de validación (texto de hasta 500 caracteres con los espacios normalizados; un JSON que no sea un objeto también se rechaza con un aviso). `main()` construye Azure (importado dentro de `main()`) y `AlertLightClient`.
 - `jarvis/cli/announce.py`: `python -m jarvis.cli.announce --base64 <texto>` encola un aviso con `SocketAnnouncer`.
-- `notifications/announcement_service.py` y `notifications/announcement_client.py` son shims deprecados que delegan en lo anterior (`enqueue` sigue disponible en el cliente).
+- `notifications/announcement_service.py` y `notifications/announcement_client.py` son los únicos restos del código antiguo: shims deprecados que delegan en lo anterior (`enqueue` sigue disponible en el cliente). Se mantienen hasta que la unidad de servicio de la Raspberry y el llamador de alertas de Vento usen los módulos `jarvis.*`; después se borran.
 - `system.md` se movió a [prompts/system.md](prompts/system.md) (`git mv`).
 
 Cambios de comportamiento permitidos por el plan: «Cambiando a Gemini.» sustituye a «Cambiar a Gemini.» en la Raspberry; el mensaje de arranque `Jarvis por voz está listo. Di «Jarvis».` pasa a `Jarvis voice is ready. Say "Jarvis".` (log en inglés, emitido una vez arrancados los componentes) y `Jarvis detenido.` pasa a `Jarvis stopped.`; los mensajes de error y estado del orquestador y de sus clases pasan a `logging` en inglés. El `main.py` antiguo no pasaba el timeout a Gemini; ahora conversación y resumen usan el de los ajustes (130 s, el mismo valor por defecto de antes).
+
+### Retirada del código antiguo (Fase 7)
+
+- Borrados `core/`, `audio/`, `speech/`, `bridge/` (incluida `legacy_context.py`), `system/`, `Indicators/`, `Sensors/`, `config/`, `webs/` y `ARDUINO/arduino_mega_connection.py`, junto con sus tests de caracterización y de fachadas (su cobertura está en `tests/unit/`). El firmware `ARDUINO/main.cs` no se tocó.
+- Ya no queda ningún import de `core`, `audio`, `speech`, `bridge`, `system`, `Indicators`, `Sensors`, `config` ni `Arduino` (se comprueba con `rg`), ni `print(` en `jarvis/`.
+- `README.md` se reescribió (arquitectura por capas, instalación, ejecución, tests y cómo añadir un proveedor); `docs/COMANDOS.md` y `docs/BRIDGE_TROUBLESHOOTING.md` se actualizaron para no apuntar a scripts del sistema anterior.
 
 ## Pruebas
 
@@ -316,9 +331,9 @@ Los tests se ejecutan en el PC de desarrollo (Windows), no en la Raspberry:
 python -m unittest discover -s tests -t .
 ```
 
-Estado actual: 284 tests, 5 omitidos: las 5 pruebas de sockets Unix (`UnixDatagramServer` y `AlertLightControlServer`), que solo se ejecutan en Linux porque Python en Windows no ofrece `socket.AF_UNIX`. Esos sockets se han comprobado con un socket falso en memoria, no con sockets reales: queda pendiente probarlos en la Raspberry. El antiguo `tests/test_main_gemini_config.py` (que estaba omitido) se reescribió como `tests/unit/bootstrap/test_assistants.py` y `tests/test_gemini_bridge_factory.py` se migró allí (se borró también `create_configured_gemini_bridge`, que ya nadie usaba). `tests/` es un paquete (`tests/__init__.py`). Los tests de caracterización de la Fase 0 fijan el comportamiento de las frases reservadas (`tests/test_intents.py`), los avisos del depósito (`tests/test_tank_alerts.py`), el parseo y la petición del puente Vento (`tests/test_vento_reply_parsing.py`) y los flujos de conversación antiguos (`tests/test_conversation_flows.py`); los antiguos se borrarán en la Fase 7. Los tests del código nuevo están en `tests/unit/` (`config/`, `domain/`, `application/`, `infrastructure/`, `bootstrap/` y `test_import_case.py`); `tests/unit/application/conversation/` cubre las clases de la Fase 5 con los fakes compartidos de `tests/fakes.py`; `tests/unit/application/` cubre `PeriodicTask`, `TankMonitor`, `ButtonMonitor`, el prompt de resumen, `ConversationMemory` y las dependencias permitidas de la capa; `tests/unit/infrastructure/` cubre los asistentes, el almacenamiento JSONL y del depósito, el servidor web (en `127.0.0.1`), los adaptadores Arduino (con un `FakeSerial`), los sockets Unix y las fachadas antiguas; `tests/unit/bootstrap/` cubre `build_assistant` y el resumen de memoria, `configure_logging`, `Application` (orden de arranque y cierre, con componentes falsos), `AnnouncementService`, la CLI de avisos y los shims de `notifications/`. No se prueban `build_application` ni el `main()` del servicio (necesitan las librerías de la Raspberry): el grafo se comprobó a mano con esas librerías sustituidas por dobles.
+Estado actual: 229 tests, 5 omitidos: las 5 pruebas de sockets Unix (`UnixDatagramServer` y `AlertLightControlServer`), que solo se ejecutan en Linux porque Python en Windows no ofrece `socket.AF_UNIX`. Esos sockets se han comprobado con un socket falso en memoria, no con sockets reales: queda pendiente probarlos en la Raspberry. `tests/` es un paquete (`tests/__init__.py`) y todos los tests están en `tests/unit/` (`config/`, `domain/`, `application/`, `infrastructure/`, `bootstrap/` y `test_import_case.py`), con los fakes compartidos en `tests/fakes.py`. `tests/unit/application/conversation/` cubre las clases de conversación; `tests/unit/application/` cubre `PeriodicTask`, `TankMonitor`, `ButtonMonitor`, el prompt de resumen, `ConversationMemory` y las dependencias permitidas de la capa; `tests/unit/infrastructure/` cubre los asistentes, el almacenamiento JSONL y del depósito, el servidor web (en `127.0.0.1`), los adaptadores Arduino (con un `FakeSerial`), los sockets Unix y el controlador de energía; `tests/unit/bootstrap/` cubre `build_assistant` y el resumen de memoria, `configure_logging`, `Application` (orden de arranque y cierre, con componentes falsos), `AnnouncementService`, la CLI de avisos y los shims de `notifications/`. No se prueban `build_application` ni el `main()` del servicio (necesitan las librerías de la Raspberry): el grafo se comprobó a mano con esas librerías sustituidas por dobles.
 
-`read_env_file` (`config/settings.py`) ya elimina las comillas simples o dobles que rodean un valor de los ficheros `.env`.
+`read_env_file` ([jarvis/config/env_file.py](jarvis/config/env_file.py)) elimina las comillas simples o dobles que rodean un valor de los ficheros `.env`.
 
 ## Alcance de esta descripción
 
