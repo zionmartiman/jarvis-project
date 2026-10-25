@@ -224,6 +224,12 @@ Reglas de `GraphDelta.from_dict` (todo lo que no cumple se descarta en silencio 
 
 Los eventos son **autosuficientes**: con aplicarlos en orden desde la versión 0 se reconstruye el grafo exacto. En eso se basan la barra de reproducción y la reconexión.
 
+Detalles fijados al implementar la Fase 1:
+
+- Con `entity_merged`, el cliente borra el nodo `from_id`, sustituye el nodo `into` **y borra las aristas que aún apunten a `from_id`**. Son las relaciones entre las dos entidades fusionadas: se invalidan con el motivo `"fusionada"`, se quedan en la entidad fusionada y el snapshot no las incluye (solo devuelve relaciones entre entidades no fusionadas). Orden de una fusión: `relation_invalidated` (duplicadas y bucles), `relation_updated` (aristas movidas) y, al final, `entity_merged`.
+- `aliases` del nodo no incluye los alias que solo repiten la `key` o el nombre (la raíz se muestra con `["yo"]`).
+- `updated_at` solo cambia cuando cambia algo visible (un alias nuevo o una fusión). Así cada cambio tiene su evento y la reconstrucción coincide con el snapshot.
+
 ## 5. Componentes y firmas
 
 ### 5.1 Puerto (`jarvis/ports/knowledge_graph.py`)
@@ -273,8 +279,8 @@ class KnowledgeGraphFeed(ABC):
 - `__init__(path: Path, clock: Callable[[], datetime] = _utc_now)`: crea `state/` si hace falta y migra (§4.1). Si la migración falla, lanza la excepción y la decisión de qué hacer la toma el bootstrap (§5.6).
 - `_connect()`: una conexión nueva con `isolation_level=None`, `foreign_keys`, `busy_timeout` y `synchronous=NORMAL`. `_write()` es un context manager que hace `BEGIN IMMEDIATE`, después `COMMIT`, o `ROLLBACK` si algo falla, y cierra la conexión.
 - **`apply(delta, observed_at)`**, en una sola transacción:
-  1. Para cada `EntityProposal`, busca `normalize_key(key)` en `entity_aliases`; si no está, busca también los alias propuestos. Si encuentra una entidad fusionada, sigue `merged_into` hasta la entidad final.
-     - Si existe: añade los alias nuevos, cuyo `alias_key` no puede pertenecer a **otra** entidad (si pertenece, no se añade y se registra), y actualiza `updated_at`. Emite `entity_updated` solo si cambió algo. No cambia `name` ni `type`, para que un error de Gemini no renombre a nadie.
+  1. Para cada `EntityProposal`, busca `normalize_key(key)` en `entity_aliases`; si no está, busca también los alias propuestos y, por último, `normalize_key(name)`. Si encuentra una entidad fusionada, sigue `merged_into` hasta la entidad final.
+     - Si existe: añade los alias nuevos (la `key` y el nombre propuestos también cuentan como alias), cuyo `alias_key` no puede pertenecer a **otra** entidad (si pertenece, no se añade y se registra), y actualiza `updated_at`. Emite `entity_updated` solo si cambió algo. No cambia `name` ni `type`, para que un error de Gemini no renombre a nadie: un nombre distinto queda como un alias más.
      - Si no existe: inserta la entidad, añade su `key` y sus alias a `entity_aliases` y emite `entity_created`.
      - Construye `resolved: dict[str, int]` (key propuesta → id).
   2. `invalidations`: resuelve los extremos (con `resolved` y, si no están, con la tabla de alias) y hace `UPDATE relations SET valid_to=?, invalidation_reason=? WHERE source_id=? AND target_id=? AND type=? AND valid_to IS NULL`. Emite un `relation_invalidated` por cada fila afectada. Un extremo desconocido se ignora.
@@ -576,7 +582,7 @@ jarvis/infrastructure/web/static/
 
 ## 6. Fases de implementación
 
-Cada fase acaba con `python -m unittest discover -s tests -t .` en verde (y `python -m compileall -q jarvis main.py`), la documentación actualizada (`CLAUDE.md`) y un commit propio.
+Cada fase acaba con `python -m unittest discover -s tests -t .` en verde (y `python -m compileall -q jarvis main.py`), la documentación actualizada (`CLAUDE.md`), **la tabla de seguimiento de la §12 actualizada** y un commit propio.
 
 ### Fase 0: comprobaciones previas (sin código de producción)
 
@@ -747,3 +753,25 @@ Cuando se aborde, el diseño de este plan permite añadirla sin rehacer nada:
 | Contenido | Extrae `usuario`, `ana` (alias «hermana») y `valencia`, y las relaciones esperadas; sin invalidaciones | Calidad suficiente. **Hallazgo:** devolvió `usuario —tiene_hermana→ ana`; ver el requisito de §5.4 (lista cerrada de tipos, regla de dirección, `RELATION_TYPE_ALIASES` y test de regresión) |
 
 **Pendiente:** límites RPM/RPD del proyecto en AI Studio (paso 4 de la checklist). Decide si la extracción se activa desde el primer día en la Fase 6.
+
+## 12. Seguimiento de la implementación
+
+> **Regla obligatoria.** Al terminar **cada** ejecución de una fase, antes del commit, quien la haya hecho (persona o Claude) actualiza su fila en esta tabla. Hay que dejar anotado:
+> 1. **Hecho:** qué se ha implementado y probado, con el recuento de tests.
+> 2. **Pendiente:** lo que queda sin hacer de esta fase y lo que se arrastra de la fase anterior.
+> 3. **Para fases futuras:** decisiones tomadas al implementar que el plan no fijaba, limitaciones y avisos para las fases siguientes.
+>
+> Si una fase se repite o se corrige más tarde, se actualiza la misma fila y se añade la fecha. Al empezar una fase, lee primero esta tabla: las columnas «Pendiente» y «Para fases futuras» de las filas anteriores forman parte de su alcance.
+
+Estados: ✅ hecha · 🟡 hecha con pendientes · ⬜ sin empezar.
+
+| Fase | Estado | Hecho | Pendiente (de esta fase o arrastrado) | Para fases futuras |
+|---|---|---|---|---|
+| 0. Comprobaciones previas | 🟡 2026-10-25 | Python 3.13.5 y SQLite 3.46.1 en la Pi. Código refactorizado arrancado en la Pi con los tests en verde. Llamada real a `gemini-3.5-flash-lite` con el esquema: HTTP 200, `temperature` aceptado, 1,1 s. Ver §11. | Paso 4: límites RPM/RPD en AI Studio (**bloquea la Fase 2**). Paso 5: validar el texto de la página de inicio (se hace en la Fase 3). Paso 6: descargar force-graph y comprobar el SHA-256 (se hace en la Fase 4). | Gemini devolvió `usuario —tiene_hermana→ ana`: la lista cerrada de tipos y la regla de dirección del prompt (§5.4) son obligatorias en la Fase 2. |
+| 1. Dominio, puerto y almacén SQLite | ✅ 2026-10-25 | `domain/knowledge_graph.py`: `EntityType`, `normalize_key`, `query_terms`, `format_timestamp`, `GraphDelta.from_dict` (topes y validación), `canonical_relation` con `RELATION_TYPE_ALIASES`, y `Entity.as_node()`/`Relation.as_link()` (JSON de §4.3). `ports/knowledge_graph.py`: `KnowledgeGraphStore`, `GraphExtractor`, `KnowledgeGraphFeed`, `PendingExtraction` y `TransientExtractionError`. `infrastructure/knowledge/sqlite_store.py`: `SqliteKnowledgeGraph` (migración 1 con WAL y raíz, una conexión por operación, `apply`, `merge_entities`, snapshot, eventos y cola persistente). Tests: 22 de dominio y 34 del almacén; **285 tests, 5 omitidos**, con `test_layering` y `test_import_case` en verde. | De la Fase 0 sigue el paso 4 (RPM/RPD). No se ha probado con Python 3.11 porque en el PC solo está 3.12 (la Pi tiene 3.13, así que no bloquea). Los tests del almacén no se han ejecutado en la Pi. | **Resolución de entidades:** clave, alias y nombre, en ese orden. Un nombre distinto para una entidad existente queda como alias. **Eventos:** las reglas de `entity_merged` (§4.3) las tiene que seguir `graph_state.js` en la Fase 4. **Fase 2:** (a) `_last_touched_ids` no puede salir solo de los eventos, porque una entidad mencionada sin cambios no genera ninguno; conviene resolver también las claves del delta con `entities_by_alias_keys`. (b) `claim_next(now)` y `retry_at` tienen que usar `format_timestamp`, porque la cola compara textos ISO. (c) `--retry-failed` necesita un método nuevo en el puerto (p. ej. `retry_failed() -> int`). (d) `--reset` debe renombrar también `-wal` y `-shm`, o hacer antes una copia con `Connection.backup`. (e) `merge_entities` lanza `ValueError` si la entidad no existe, si las dos son la misma o si el origen es la raíz; la CLI lo muestra como un error. (f) `enqueue` con la cola llena puede borrar una tarea que el worker tiene reclamada; entonces `complete` no aplica nada, devuelve `[]` y lo registra. **`from_dict`:** un nombre, `fact` o `reason` demasiado largo se recorta; un alias de más de 60 caracteres se descarta; una relación sin `fact` se descarta y una invalidación sin `reason` se conserva. **Fase 5:** «yo» no es stopword, así que el alias de la raíz coincide en `query_terms`; `active_relations` ya ordena por extremos coincidentes y luego por `valid_from`. **Fase 4:** el feed no expone `graph_id` por separado; `/api/memory/events` puede usar `snapshot().graph_id` o un método nuevo. El almacén no tiene `close()`: no mantiene conexiones abiertas. |
+| 2. Extracción y worker | ⬜ | | Bloqueada por el paso 4 de la Fase 0. | |
+| 3. Sitio web con inicio y menú | ⬜ | | | |
+| 4. Visualizador en directo | ⬜ | | | |
+| 5. Recuperación hacia Gemini | ⬜ | | | |
+| 6. Despliegue y documentación | ⬜ | | | |
+| 7. Vista en Obsidian (opcional) | ⬜ | | | |
