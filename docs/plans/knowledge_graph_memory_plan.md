@@ -1,5 +1,7 @@
 # Plan: memoria persistente en grafo con visualización en tiempo real
 
+> **Plan técnico de implementación:** [knowledge_graph_memory_technical_plan.md](knowledge_graph_memory_technical_plan.md). Allí se fija force-graph como librería y se aplaza la autenticación de la web y el CORS (las referencias a token de este documento quedan para una fase futura).
+>
 > Los términos técnicos marcados con ◆ (WAL, FTS5, SSE, GraphDelta, vis-network, force-graph…) se explican en el [glosario](#glosario) del final.
 
 ## Contexto
