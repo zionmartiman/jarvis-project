@@ -3,6 +3,32 @@
 > **Estado:** pendiente de ejecución (preparado el 2026-10-25).
 > Quien ejecute este plan debe marcar aquí cada fase como completada al terminarla.
 
+## Entorno de ejecución (restricción obligatoria)
+
+> **Jarvis se ejecuta en Raspberry Pi OS (Linux, ARM64), no en Windows.** Los tests y el desarrollo
+> se hacen en el PC Windows del propietario (VS Code). **En la Raspberry no se lanzan tests**: solo
+> se arranca la aplicación. Quien ejecute este plan debe tenerlo siempre en cuenta:
+>
+> - **Linux distingue mayúsculas y minúsculas en rutas y en `import`.** Un nombre que funciona
+>   en Windows puede fallar en la Raspberry. Por eso todos los paquetes nuevos van en minúsculas
+>   (`jarvis/`, `jarvis/infrastructure/`…) y los imports deben coincidir exactamente con el nombre
+>   real del fichero o carpeta. El error `No module named 'Arduino'` existe por esto: la carpeta es `ARDUINO/`.
+> - **Rutas siempre POSIX** (`/`), nunca `\`. Usar `pathlib.Path` y no concatenar cadenas.
+> - **Rutas de sistema solo en Linux:** `/run/user/<uid>` (sockets y lock), `/dev/ttyACM0`, `plughw:…`
+>   (ALSA), `aplay`, `sudo -n /usr/sbin/poweroff`, `fcntl`. Los tests no deben depender de ellas
+>   (ver regla 5 de §3); las que sí dependen se marcan con `skipUnless` de Linux.
+> - **Los tests se ejecutan solo en Windows (VS Code).** Como Windows no distingue mayúsculas, un
+>   import mal escrito pasa los tests pero falla en la Raspberry. Por eso existe la prueba de nombres
+>   exactos (Fase 2, punto 7), que compara cada import con los ficheros reales distinguiendo mayúsculas.
+> - **Mayúsculas al renombrar en Git desde Windows:** un cambio que solo cambia mayúsculas
+>   (`Sensors` → `sensors`) no se detecta en un sistema de ficheros sin distinción de mayúsculas.
+>   Usar `git mv -f` en dos pasos (`Sensors` → `tmp_sensors` → `sensors`) o renombrar directamente
+>   el paquete nuevo en `jarvis/`; no se conservan carpetas en mayúsculas.
+> - **Fin de línea y codificación:** UTF-8 y `\n`. Los ficheros de texto que lee la Raspberry
+>   (`*.env`, JSON, `system.md`) no deben tener BOM.
+> - **Permisos:** `os.chmod(..., 0o600)` y `0o700` tienen sentido solo en Linux; Windows los ignora.
+>   No añadir lógica que dependa de ellos para pasar tests.
+
 ## Context
 
 Jarvis (asistente de voz en Raspberry Pi + Arduino Mega) ha crecido por parches: hay
@@ -12,12 +38,14 @@ copias de seguridad versionadas, clases muertas, una clase de 280 líneas que lo
 con mayúsculas, comentarios en dos idiomas, secretos dentro de Git y documentación que ya
 no coincide con el código. Además **3 tests fallan hoy** y `main.py` no puede importarse
 desde este checkout (`ModuleNotFoundError: No module named 'Arduino'`, la carpeta se llama
-`ARDUINO` y Python distingue mayúsculas en imports incluso en Windows).
+`ARDUINO`. Windows ignora la diferencia entre mayúsculas y minúsculas, pero Linux (la Raspberry)
+no, así que este fallo solo aparece en la Raspberry).
 
 Objetivo: un único paquete `jarvis/` organizado por capas (dominio, puertos, aplicación,
 infraestructura, arranque), clases pequeñas con una responsabilidad, dependencias
 inyectadas por constructor (SOLID), sin código muerto ni secretos, con tests que pasen en
-Windows y **sin cambiar el comportamiento observable** (salvo las excepciones listadas).
+Windows (donde se ejecutan) y **sin cambiar el comportamiento observable** (salvo las excepciones
+listadas).
 
 Este plan está pensado para ejecutarse con un modelo más ligero: cada fase es pequeña,
 autocontenida, termina con tests verdes y documentación actualizada.
@@ -300,6 +328,7 @@ Crear `jarvis/` con `__init__.py` en cada subpaquete. En esta fase el código an
    - `MemoryEntry` (copiar de `core/memory.py`) y `MemoryBackend` (copiar).
    - `Announcer.announce(text) -> None`. `TankStateStore.save(level) -> None`.
 6. Tests en `tests/unit/domain/` para `intents`, `ShortTermHistory`, `TankCalibration`, `TankAlertPolicy` (mover aquí los casos de `test_tank_alerts.py` adaptados), y `tests/unit/config/` para env_file y `load_settings` (valores por defecto y rutas relativas a la raíz).
+7. **Prueba de nombres exactos** `tests/unit/test_import_case.py` (obligatoria, se ejecuta en Windows): recorre con `ast` todos los `import jarvis...` y `from jarvis... import ...` de `jarvis/`, `main.py` y `tests/`. Para cada componente del módulo comprueba que existe en disco con **exactamente** esa capitalización, usando `os.listdir` (no `os.path.exists`, porque Windows ignora mayúsculas). Así detecta en Windows lo que fallaría en la Raspberry. Debe fallar hoy con `Arduino` (carpeta real `ARDUINO`) y pasar al terminar el refactor.
 
 ### Fase 3 — Infraestructura (adaptadores)
 Mover/reescribir cada adaptador para implementar su puerto y recibir su configuración por constructor. Tras cada sub-paso, actualizar los imports de los módulos antiguos que lo usaban (`grep`) para que la app antigua siga arrancando con el adaptador nuevo.
@@ -414,6 +443,12 @@ python -m unittest discover -s tests -t .
 python -m compileall -q jarvis main.py
 ```
 Al final además: los dos `rg` de la Fase 7 sin resultados, y `python -c "import jarvis.bootstrap.assistants"` funciona en Windows.
+
+**Comprobación de mayúsculas (obligatoria al final, en Windows):** `tests/unit/test_import_case.py`
+debe pasar. Es la única garantía de que los imports coinciden con los nombres reales en Linux.
+
+**En la Raspberry (solo arranque, sin tests):** seguir la lista de comprobación de funcionamiento
+de arriba, tras desplegar el código (por `scp`/SFTP) y reiniciar el servicio con `docs/COMANDOS.md`.
 
 **En la Raspberry (fin del refactor, siguiendo `docs/COMANDOS.md`, servicio detenido y `python main.py` en primer plano):**
 1. Arranca, dice «Sistemas listos.», LED rojo, log de la primera lectura del depósito.
