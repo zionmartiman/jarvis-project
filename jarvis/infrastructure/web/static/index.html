@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jarvis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/site/site.css">
+  <script src="/static/site/nav.js" defer></script>
+  <style>
+    :root {
+      --card-bg: rgba(16, 24, 39, 0.75);
+      --card-border: rgba(255, 255, 255, 0.12);
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --card-bg: rgba(255, 255, 255, 0.85);
+        --card-border: rgba(15, 23, 42, 0.12);
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--site-bg);
+      background-image:
+        radial-gradient(circle at 15% 20%, rgba(0, 242, 254, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 85% 80%, rgba(0, 114, 255, 0.08) 0%, transparent 40%);
+      font-family: "Inter", -apple-system, sans-serif;
+      color: var(--site-text);
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+    }
+
+    .intro h1 {
+      font-size: clamp(1.8rem, 4vw, 2.6rem);
+      margin: 0 0 0.75rem;
+    }
+
+    .intro p {
+      color: var(--site-text-muted);
+      max-width: 60ch;
+      line-height: 1.6;
+    }
+
+    .flow {
+      margin: 2.5rem 0;
+      overflow-x: auto;
+    }
+
+    .flow svg {
+      display: block;
+      min-width: 640px;
+      width: 100%;
+    }
+
+    .flow-box {
+      fill: var(--card-bg);
+      stroke: var(--card-border);
+    }
+
+    .flow-label {
+      fill: var(--site-text);
+      font-family: "Inter", -apple-system, sans-serif;
+      font-size: 13px;
+      text-anchor: middle;
+    }
+
+    .flow-arrow {
+      stroke: var(--site-accent);
+      stroke-width: 2;
+      fill: none;
+      marker-end: url(#flow-arrowhead);
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    .card h2 {
+      margin: 0 0 0.5rem;
+      font-size: 1.05rem;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--site-text-muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .card .live {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: var(--site-accent);
+      margin: 0.5rem 0;
+    }
+
+    .card a {
+      display: inline-block;
+      margin-top: 0.75rem;
+      color: var(--site-accent);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .card a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="intro">
+      <h1>Jarvis</h1>
+      <p>
+        Asistente de voz local para la Raspberry Pi: escucha la palabra «Jarvis», conversa con
+        Gemini o Vento y responde en voz alta con Azure Speech, mientras un Arduino Mega se
+        encarga de los indicadores y de vigilar el depósito de agua de lluvia.
+      </p>
+    </section>
+
+    <section class="flow" aria-label="Flujo de una conversación">
+      <svg viewBox="0 0 640 110" role="img" aria-labelledby="flow-title">
+        <title id="flow-title">Micrófono, Vosk, el agente activo, Azure y el altavoz</title>
+        <defs>
+          <marker id="flow-arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="var(--site-accent)"></path>
+          </marker>
+        </defs>
+        <g>
+          <rect class="flow-box" x="10" y="30" width="110" height="50" rx="10"></rect>
+          <text class="flow-label" x="65" y="59">Micrófono</text>
+
+          <rect class="flow-box" x="150" y="30" width="110" height="50" rx="10"></rect>
+          <text class="flow-label" x="205" y="59">Vosk</text>
+
+          <rect class="flow-box" x="290" y="30" width="130" height="50" rx="10"></rect>
+          <text class="flow-label" x="355" y="53">Gemini</text>
+          <text class="flow-label" x="355" y="68">o Vento</text>
+
+          <rect class="flow-box" x="450" y="30" width="110" height="50" rx="10"></rect>
+          <text class="flow-label" x="505" y="59">Azure</text>
+
+          <rect class="flow-box" x="590" y="30" width="40" height="50" rx="10" opacity="0"></rect>
+
+          <line class="flow-arrow" x1="120" y1="55" x2="146" y2="55"></line>
+          <line class="flow-arrow" x1="260" y1="55" x2="286" y2="55"></line>
+          <line class="flow-arrow" x1="420" y1="55" x2="446" y2="55"></line>
+        </g>
+        <g>
+          <text class="flow-label" x="595" y="59" text-anchor="start">Altavoz</text>
+          <line class="flow-arrow" x1="560" y1="55" x2="586" y2="55"></line>
+        </g>
+      </svg>
+    </section>
+
+    <section class="cards">
+      <article class="card">
+        <h2>Asistente de voz</h2>
+        <p>
+          Vosk reconoce la palabra de activación y la instrucción en local; el agente activo
+          (Gemini por defecto, o Vento tras decir «cambiar de modelo») responde en texto y
+          Azure Speech lo convierte en voz.
+        </p>
+      </article>
+
+      <article class="card">
+        <h2>Depósito de agua</h2>
+        <p class="live" id="tank-level-value">—</p>
+        <p>Nivel de llenado medido cada 5 segundos con un sensor ultrasónico.</p>
+        <a href="/deposito">Ver el panel →</a>
+      </article>
+
+      <article class="card">
+        <h2>Memoria en grafo</h2>
+        <p class="live" id="graph-counts-value">—</p>
+        <p>Entidades y relaciones que Jarvis va aprendiendo de las conversaciones.</p>
+        <a href="/memoria">Ver la memoria →</a>
+      </article>
+
+      <article class="card">
+        <h2>Hardware</h2>
+        <p>
+          Raspberry Pi 3B con micrófono USB y un Arduino Mega: LED de estado, LED de avisos,
+          sensor ultrasónico, botón de apagado maestro y botón de interrupción.
+        </p>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    async function loadTankLevel() {
+      var el = document.getElementById("tank-level-value");
+      try {
+        var response = await fetch("/api/rainwater-tank/current-level", { cache: "no-store" });
+        if (!response.ok) throw new Error("http " + response.status);
+        var data = await response.json();
+        if (typeof data.fill_percentage !== "number") throw new Error("sin medida");
+        el.textContent = Math.round(data.fill_percentage) + "%";
+      } catch (error) {
+        el.textContent = "—";
+      }
+    }
+
+    async function loadGraphCounts() {
+      var el = document.getElementById("graph-counts-value");
+      try {
+        var response = await fetch("/api/memory/graph", { cache: "no-store" });
+        if (!response.ok) throw new Error("http " + response.status);
+        var data = await response.json();
+        var entities = Array.isArray(data.nodes) ? data.nodes.length : 0;
+        var relations = Array.isArray(data.links) ? data.links.length : 0;
+        el.textContent = entities + " entidades · " + relations + " relaciones";
+      } catch (error) {
+        el.textContent = "—";
+      }
+    }
+
+    loadTankLevel();
+    loadGraphCounts();
+    setInterval(loadTankLevel, 30000);
+    setInterval(loadGraphCounts, 30000);
+  </script>
+</body>
+</html>

@@ -40,7 +40,7 @@ from jarvis.infrastructure.knowledge.sqlite_store import SqliteKnowledgeGraph
 from jarvis.infrastructure.memory.jsonl_backend import JsonlMemoryBackend
 from jarvis.infrastructure.system.power_controller import SudoPowerController
 from jarvis.infrastructure.tank.state_file import JsonTankStateFile
-from jarvis.infrastructure.web.tank_web_server import DEFAULT_DASHBOARD_PATH, TankWebServer
+from jarvis.infrastructure.web.web_server import STATIC_DIR, JarvisWebServer
 from jarvis.ports.hardware import ButtonPress
 
 LOGGER = logging.getLogger(__name__)
@@ -148,11 +148,12 @@ def build_application(settings: Settings) -> Application:
         ),
         settings.tank.poll_interval_seconds,
     )
-    web_server = TankWebServer(
-        latest_level=tank_monitor.latest_level,
+    web_server = JarvisWebServer(
         host=settings.web.host,
         port=settings.web.port,
-        dashboard_path=DEFAULT_DASHBOARD_PATH,
+        static_dir=STATIC_DIR,
+        latest_level=tank_monitor.latest_level,
+        memory_feed=None,
     )
 
     memory = ConversationMemory(
