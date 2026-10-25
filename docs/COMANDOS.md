@@ -142,6 +142,39 @@ http://<IP-de-la-Raspberry>:8765/memoria
 
 Inicio: `/`; depósito: `/deposito`. Por línea de comandos: `curl http://localhost:8765/api/memory/graph` (snapshot), `curl "http://localhost:8765/api/memory/events?since=0&limit=100"` (eventos) y `curl -N http://localhost:8765/api/memory/stream?since=0` (SSE; Ctrl+C para salir). El grafo cambia en la página mientras `rebuild_graph --process` o Jarvis escriben en la base de datos (los cambios de otro proceso tardan hasta 1 s en verse).
 
+### Copia de seguridad y medidas
+
+Copia consistente de la base de datos (usa la API de backup de SQLite, válida con Jarvis en marcha):
+
+```bash
+cd /home/jarvis/jarvis-project
+source .venv/bin/activate
+python -c "import sqlite3; s=sqlite3.connect('state/knowledge_graph.sqlite3'); d=sqlite3.connect('/tmp/kg.bak'); s.backup(d)"
+```
+
+Medidas de la Fase 6 (tras unos días con la extracción activada):
+
+```bash
+# Memoria (RSS en KB) del proceso de Jarvis
+ps -o rss,cmd -C python
+# Tamaño de la base de datos y sus ficheros -wal y -shm
+ls -l state/knowledge_graph.sqlite3*
+# Entidades, relaciones vigentes y tareas de la cola por estado
+python -c "import sqlite3; c=sqlite3.connect('state/knowledge_graph.sqlite3'); print(c.execute('SELECT COUNT(*) FROM entities').fetchone(), c.execute('SELECT status, COUNT(*) FROM extraction_queue GROUP BY status').fetchall())"
+# Latencia de cada extracción (INFO: "Knowledge extraction took …s, +N events")
+grep "Knowledge extraction took" jarvis-voice.log | tail
+```
+
+### Despliegue por fases en la Raspberry (Fase 6)
+
+Los dos interruptores están en `KnowledgeGraphSettings` (`jarvis/config/settings.py`) y se activan uno a uno, cada uno con un commit del propietario:
+
+1. Con ambos a `False`: arrancar el servicio, comprobar que el log no tiene errores y que `/`, `/deposito` y `/memoria` responden.
+2. `python -m jarvis.cli.rebuild_graph --process`; revisar el grafo en `/memoria` y fusionar duplicados con `merge_entities`.
+3. `extraction_enabled=True`. Probar «mi hermana se llama Ana y vive en Valencia» y después «Ana se ha mudado a Madrid»; la relación antigua debe salir discontinua en `/memoria`.
+4. `retrieval_enabled=True`. Preguntar «¿dónde vive mi hermana?» y comprobar los hechos enviados con el logger `jarvis.application.knowledge` a nivel DEBUG (Valencia ya no debe enviarse tras la mudanza).
+5. Tomar las medidas de arriba y decidir `extraction_thinking` y si se puede omitir el resumen JSONL cuando hay hechos del grafo.
+
 ## Tests en el PC de desarrollo
 
 ```bash

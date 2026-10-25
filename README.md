@@ -25,7 +25,7 @@ bootstrap  ->  infrastructure  ->  ports  <-  application  ->  domain
 | `jarvis/infrastructure/` | Implementaciones concretas: Vosk, Azure, Gemini, Vento, Arduino, sockets Unix, servidor web, ficheros. |
 | `jarvis/bootstrap/` | Único lugar que conoce las clases concretas y lee la configuración (`build_application`). |
 | `jarvis/config/` | Rutas, ajustes y carga de credenciales. |
-| `jarvis/services/`, `jarvis/cli/` | Receptor de avisos y su CLI, ejecutables como procesos independientes. |
+| `jarvis/services/`, `jarvis/cli/` | Receptor de avisos y su CLI, y las CLI de la memoria en grafo, ejecutables como procesos independientes. |
 
 Otros directorios: `main.py` (entrada), `prompts/system.md` (prompt de sistema de Gemini),
 `ARDUINO/main.cs` (firmware, solo para flashear la placa), `models/` (modelo de Vosk), `state/`
@@ -66,6 +66,20 @@ Los avisos hablados del depósito necesitan el receptor, que se ejecuta aparte:
 python -m jarvis.services.announcement_service
 python -m jarvis.cli.announce --base64 "$(echo -n 'Prueba de aviso' | base64)"
 ```
+
+## Memoria en grafo y sitio web
+
+Jarvis crea al arrancar `state/knowledge_graph.sqlite3` (entidades y relaciones con fechas, más una
+cola de extracción persistente). Gemini extrae los hechos de cada intercambio y, con la
+recuperación activada, recibe los vigentes relacionados con la pregunta. Los dos interruptores
+(`extraction_enabled` y `retrieval_enabled`, en `KnowledgeGraphSettings` de
+`jarvis/config/settings.py`) están a `False` hasta completar el despliegue en la Raspberry; ver
+«Despliegue por fases» en [docs/COMANDOS.md](docs/COMANDOS.md).
+
+El servidor web (puerto 8765) sirve el inicio (`/`), el panel del depósito (`/deposito`) y el
+grafo en directo (`/memoria`). Las CLI `python -m jarvis.cli.rebuild_graph` y
+`python -m jarvis.cli.merge_entities` pueblan y limpian el grafo. Plan técnico:
+[docs/plans/knowledge_graph_memory_technical_plan.md](docs/plans/knowledge_graph_memory_technical_plan.md).
 
 ## Tests
 
