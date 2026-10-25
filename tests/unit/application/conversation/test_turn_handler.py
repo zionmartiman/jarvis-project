@@ -110,6 +110,32 @@ class TurnHandlerTest(unittest.TestCase):
 
                 self.assertEqual(knowledge.observed, [("Mi hermana se llama Ana", "respuesta")])
 
+    def test_gemini_receives_the_graph_facts_and_vento_does_not(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            memory = ConversationMemory(JsonlMemoryBackend(Path(directory) / "c.jsonl"))
+            for model, expected in ((AssistantModel.GEMINI, "- Ana vive en Valencia."), (AssistantModel.VENTO, None)):
+                with self.subTest(model=model):
+                    knowledge = RecordingKnowledge(facts="- Ana vive en Valencia.")
+                    harness = ConversationHarness(memory=memory, knowledge=knowledge)
+                    harness.select(model)
+
+                    harness.turns.handle("¿Dónde vive mi hermana?", ShortTermHistory(6))
+
+                    self.assertEqual(harness.bridge.contexts[0].knowledge, expected)
+                    self.assertEqual(
+                        knowledge.queries, ["¿Dónde vive mi hermana?"] if expected else []
+                    )
+
+    def test_gemini_without_graph_memory_gets_no_knowledge(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            memory = ConversationMemory(JsonlMemoryBackend(Path(directory) / "c.jsonl"))
+            harness = ConversationHarness(memory=memory)
+            harness.select(AssistantModel.GEMINI)
+
+            harness.turns.handle("Hola", ShortTermHistory(6))
+
+            self.assertIsNone(harness.bridge.contexts[0].knowledge)
+
     def test_a_failed_turn_is_not_observed(self) -> None:
         knowledge = RecordingKnowledge()
         harness = ConversationHarness(bridge=FailingBridge(), knowledge=knowledge)

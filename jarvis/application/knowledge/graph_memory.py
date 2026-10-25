@@ -65,7 +65,6 @@ class KnowledgeGraphMemory(KnowledgeGraphFeed):
         self._extractor = extractor
         self._limits = limits
         self._extraction_enabled = extraction_enabled
-        # Read by context_for in Phase 5.
         self._retrieval_enabled = retrieval_enabled
         self._clock = clock
         self._wake = threading.Event()
@@ -113,6 +112,34 @@ class KnowledgeGraphMemory(KnowledgeGraphFeed):
 
     def enqueue_summary(self, summary: str, observed_at: str) -> None:
         self._store.enqueue("summary", summary, "", observed_at, self._limits.max_pending)
+
+    def context_for(self, query: str) -> str | None:
+        """Current facts about the entities the query mentions, as text for Gemini; never raises."""
+        if not self._retrieval_enabled:
+            return None
+        try:
+            entities = self._store.entities_by_alias_keys(query_terms(query))
+            if not entities:
+                return None
+            relations = self._store.active_relations(
+                [entity.id for entity in entities], self._limits.max_context_facts
+            )
+        except Exception:
+            LOGGER.exception("Unable to read the knowledge graph for the query.")
+            return None
+        lines: list[str] = []
+        size = 0
+        for relation in relations:
+            fact = " ".join(relation.fact.split()).rstrip(".")
+            line = f"- {fact}. (desde {relation.valid_from[:10]})"
+            size += len(line) + (1 if lines else 0)
+            if size > self._limits.max_context_chars:
+                break
+            lines.append(line)
+        if not lines:
+            return None
+        LOGGER.debug("Knowledge facts sent to the assistant:\n%s", "\n".join(lines))
+        return "\n".join(lines)
 
     def process_pending_once(self) -> bool:
         """Extract the next due item; return False when there was none."""

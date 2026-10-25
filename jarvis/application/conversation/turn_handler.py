@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from dataclasses import replace
 from queue import Empty, Queue
 
 from jarvis.application.conversation.assistant_selector import AssistantSelector
@@ -58,6 +59,8 @@ class TurnHandler:
             try:
                 if model.uses_long_term_memory and self._memory is not None:
                     context = self._memory.get_context()
+                    if self._knowledge is not None:
+                        context = replace(context, knowledge=self._knowledge.context_for(command))
                 else:
                     context = history.as_context()
                 reply = self._ask_interruptibly(bridge, command, context)

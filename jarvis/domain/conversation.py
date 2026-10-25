@@ -23,6 +23,7 @@ class ConversationContext:
 
     messages: tuple[ChatMessage, ...] = ()
     summary: str | None = None
+    knowledge: str | None = None
 
 
 class ShortTermHistory:

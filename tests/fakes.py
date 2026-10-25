@@ -130,10 +130,16 @@ class BlockingBridge(AssistantBridge):
 
 
 class RecordingKnowledge:
-    """Stands in for KnowledgeGraphMemory in the turn tests: it only records what it observes."""
+    """Stands in for KnowledgeGraphMemory in the turn tests: records what it observes and is asked."""
 
-    def __init__(self) -> None:
+    def __init__(self, facts: str | None = None) -> None:
         self.observed: list[tuple[str, str]] = []
+        self.queries: list[str] = []
+        self.facts = facts
+
+    def context_for(self, query: str) -> str | None:
+        self.queries.append(query)
+        return self.facts
 
     def observe_exchange(self, user_text: str, assistant_text: str) -> None:
         self.observed.append((user_text, assistant_text))

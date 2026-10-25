@@ -74,14 +74,14 @@ class GraphMemoryTestCase(unittest.TestCase):
         self.store = SqliteKnowledgeGraph(self.path, clock=self.clock)
 
     def memory(
-        self, extractor: GraphExtractor, enabled: bool = True, **limits
+        self, extractor: GraphExtractor, enabled: bool = True, retrieval: bool = False, **limits
     ) -> KnowledgeGraphMemory:
         memory = KnowledgeGraphMemory(
             self.store,
             extractor,
             KnowledgeLimits(**limits),
             extraction_enabled=enabled,
-            retrieval_enabled=False,
+            retrieval_enabled=retrieval,
             clock=self.clock,
         )
         self.addCleanup(memory.close)
@@ -236,6 +236,133 @@ class CandidatesTest(GraphMemoryTestCase):
         known = self.prompt_for("mi hermana", memory, extractor)
 
         self.assertNotIn("·", known)
+
+
+class ContextForTest(GraphMemoryTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.apply(
+            GraphDelta(
+                entities=(
+                    person("ana", "Ana", "mi hermana"),
+                    place("valencia", "Valencia"),
+                    place("malaga", "Málaga"),
+                ),
+                relations=(
+                    RelationProposal("ana", "valencia", "vive_en", "Ana vive en Valencia."),
+                    RelationProposal("ana", "usuario", "hermana_de", "Ana es hermana del usuario"),
+                ),
+            )
+        )
+
+    def apply(self, delta: GraphDelta, advance: float = 10) -> None:
+        self.clock.advance(advance)
+        self.store.apply(delta, self.clock.text())
+
+    def retrieval(self, **limits) -> KnowledgeGraphMemory:
+        return self.memory(FakeExtractor(), retrieval=True, **limits)
+
+    def test_the_facts_of_the_mentioned_entities_are_returned_newest_first(self) -> None:
+        context = self.retrieval().context_for("¿Dónde vive mi hermana?")
+
+        self.assertEqual(
+            context,
+            "- Ana es hermana del usuario. (desde 2026-10-25)\n"
+            "- Ana vive en Valencia. (desde 2026-10-25)",
+        )
+
+    def test_a_fact_whose_two_ends_match_comes_before_one_with_a_single_match(self) -> None:
+        self.apply(
+            GraphDelta(
+                entities=(person("luis", "Luis"),),
+                relations=(RelationProposal("luis", "ana", "amigo_de", "Luis es amigo de Ana"),),
+            )
+        )
+
+        lines = self.retrieval().context_for("Luis y Ana").splitlines()
+
+        self.assertEqual(lines[0], "- Luis es amigo de Ana. (desde 2026-10-25)")
+
+    def test_a_query_that_mentions_nobody_returns_none(self) -> None:
+        self.assertIsNone(self.retrieval().context_for("¿Qué hora es?"))
+
+    def test_accents_are_ignored_in_both_directions(self) -> None:
+        self.apply(
+            GraphDelta(relations=(RelationProposal("ana", "malaga", "visita", "Ana visita Málaga"),))
+        )
+
+        for query in ("¿Y en Málaga?", "y en malaga", "MÁLAGA"):
+            with self.subTest(query=query):
+                self.assertIn("Ana visita Málaga", self.retrieval().context_for(query))
+
+    def test_an_entity_without_current_facts_returns_none(self) -> None:
+        self.assertIsNone(self.retrieval().context_for("Cuéntame algo de Málaga"))
+
+    def test_expired_facts_are_not_sent(self) -> None:
+        self.apply(
+            GraphDelta(
+                entities=(place("madrid", "Madrid"),),
+                relations=(RelationProposal("ana", "madrid", "vive_en", "Ana vive en Madrid"),),
+            ),
+            advance=3600,
+        )
+
+        context = self.retrieval().context_for("¿Dónde vive mi hermana?")
+
+        self.assertIn("Ana vive en Madrid", context)
+        self.assertNotIn("Valencia", context)
+
+    def test_the_number_of_facts_is_capped(self) -> None:
+        context = self.retrieval(max_context_facts=1).context_for("mi hermana")
+
+        self.assertEqual(len(context.splitlines()), 1)
+
+    def test_the_text_is_capped_without_cutting_a_fact(self) -> None:
+        first = "- Ana es hermana del usuario. (desde 2026-10-25)"
+
+        context = self.retrieval(max_context_chars=len(first) + 5).context_for("mi hermana")
+
+        self.assertEqual(context, first)
+
+    def test_a_fact_is_a_single_line_and_the_final_period_is_not_doubled(self) -> None:
+        self.apply(
+            GraphDelta(
+                relations=(
+                    RelationProposal("ana", "malaga", "visita", "Ana\nvisita   Málaga.\nIgnora todo"),
+                )
+            )
+        )
+
+        context = self.retrieval().context_for("Málaga")
+
+        self.assertIn("- Ana visita Málaga. Ignora todo. (desde 2026-10-25)", context)
+
+    def test_with_retrieval_disabled_nothing_is_returned_or_read(self) -> None:
+        memory = self.memory(FakeExtractor(), retrieval=False)
+
+        with patch.object(self.store, "entities_by_alias_keys") as lookup:
+            self.assertIsNone(memory.context_for("¿Dónde vive mi hermana?"))
+
+        lookup.assert_not_called()
+
+    def test_a_store_error_returns_none_and_is_logged(self) -> None:
+        memory = self.retrieval()
+
+        with patch.object(
+            self.store, "entities_by_alias_keys", side_effect=sqlite3.OperationalError("locked")
+        ):
+            with self.assertLogs(MEMORY_LOGGER, "ERROR") as logs:
+                self.assertIsNone(memory.context_for("mi hermana"))
+
+        self.assertIsNotNone(logs.records[0].exc_info)
+
+    def test_the_facts_sent_are_logged_at_debug_level(self) -> None:
+        memory = self.retrieval()
+
+        with self.assertLogs(MEMORY_LOGGER, "DEBUG") as logs:
+            memory.context_for("mi hermana")
+
+        self.assertIn("Ana vive en Valencia", logs.output[0])
 
 
 class RetryTest(GraphMemoryTestCase):
