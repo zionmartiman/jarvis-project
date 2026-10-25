@@ -45,7 +45,7 @@ El punto de composición principal es [main.py](main.py). La configuración cent
 - El pulsador para interrumpir una respuesta hablada se conecta entre D3 y GND. D3 también está configurado como `INPUT_PULLUP`; no requiere resistencia externa y debe usarse un pulsador normalmente abierto.
 - El LED independiente de avisos está declarado como **rojo** en D12. El código no declara un LED blanco. Si la instalación física tiene uno blanco, el color del componente real no queda reflejado en el firmware.
 
-Las conexiones aparecen documentadas en el firmware [ARDUINO/Main program/main.cs](ARDUINO/Main%20program/main.cs). La longitud de 10 metros del cable hacia el depósito forma parte del contexto físico descrito por el propietario, pero no es verificable desde el código.
+Las conexiones aparecen documentadas en el firmware [ARDUINO/main.cs](ARDUINO/main.cs). La longitud de 10 metros del cable hacia el depósito forma parte del contexto físico descrito por el propietario, pero no es verificable desde el código.
 
 ## Arranque y selección del agente
 
@@ -109,7 +109,7 @@ El azul sube y baja con una semionda de un segundo; el amarillo cambia de estado
 
 ### Botones físicos
 
-Ambos pulsadores se sondean independientemente del medidor mediante [system/arduino_button_monitor.py](system/arduino_button_monitor.py). El monitor consulta `BUTTON STATUS` al Arduino cada 0,1 segundos; el firmware responde `BUTTON_SHUTDOWN` para el botón de D2, `BUTTON_INTERRUPT` para el botón de D3 y `BUTTON_IDLE` cuando no hay una pulsación pendiente. Las dos entradas tienen antirrebote y detección de flanco en [ARDUINO/Main program/main.cs](ARDUINO/Main%20program/main.cs).
+Ambos pulsadores se sondean independientemente del medidor mediante [system/arduino_button_monitor.py](system/arduino_button_monitor.py). El monitor consulta `BUTTON STATUS` al Arduino cada 0,1 segundos; el firmware responde `BUTTON_SHUTDOWN` para el botón de D2, `BUTTON_INTERRUPT` para el botón de D3 y `BUTTON_IDLE` cuando no hay una pulsación pendiente. Las dos entradas tienen antirrebote y detección de flanco en [ARDUINO/main.cs](ARDUINO/main.cs).
 
 El botón de D2 activa el apagado maestro en cualquier fase: detiene la captura del micrófono, interrumpe la síntesis/reproducción activa de Azure y `aplay`, anuncia «Apagado manual accionado!, apagando sistemas.» y llama a `poweroff`. Las operaciones para interrumpir el audio están en [speech/azure_synthesizer.py](speech/azure_synthesizer.py) y [audio/player.py](audio/player.py).
 
@@ -208,8 +208,12 @@ Estos puntos afectan a la diferencia entre el repositorio y la instalación desc
 - Monitor de botones físicos: [system/arduino_button_monitor.py](system/arduino_button_monitor.py)
 - Indicadores y medidor: [Indicators/arduino_rgb_indicator.py](Indicators/arduino_rgb_indicator.py), [Indicators/arduino_alert_client.py](Indicators/arduino_alert_client.py), [Sensors/rainwater_tank_meter.py](Sensors/rainwater_tank_meter.py)
 - Panel web y receptor de avisos: [Sensors/rainwater_tank_web_server.py](Sensors/rainwater_tank_web_server.py), [notifications/announcement_service.py](notifications/announcement_service.py)
-- Firmware Arduino: [ARDUINO/Main program/main.cs](ARDUINO/Main%20program/main.cs)
+- Firmware Arduino (solo para flashear la placa): [ARDUINO/main.cs](ARDUINO/main.cs)
 - Control de energía: [system/power_control.py](system/power_control.py)
+
+## Refactor planificado
+
+Existe un plan de refactor y reestructuración pendiente de ejecución en [docs/PLAN_REFACTOR.md](PLAN_REFACTOR.md): paquete único `jarvis/` por capas, limpieza de backups y código muerto, retirada de secretos de Git y corrección de los tests que fallan actualmente. Mientras no se ejecute, este documento sigue describiendo la estructura actual.
 
 ## Alcance de esta descripción
 
