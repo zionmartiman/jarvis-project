@@ -9,7 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from bridge.legacy_context import history_to_context
-from config import settings
 from config.settings import GeminiCredentials
 from core.interfaces import AssistantBridge
 from jarvis.infrastructure.assistants.gemini import GeminiAssistant
@@ -25,7 +24,7 @@ class GeminiBridge(AssistantBridge):
 
     @staticmethod
     def _load_system_prompt(system_prompt_path: str | Path | None) -> str:
-        default_path = Path(__file__).resolve().parent.parent / "system.md"
+        default_path = Path(__file__).resolve().parent.parent / "prompts" / "system.md"
         prompt_path = Path(system_prompt_path) if system_prompt_path else default_path
         if not prompt_path.exists():
             return ""
@@ -36,18 +35,3 @@ class GeminiBridge(AssistantBridge):
 
     def ask(self, message: str, history: list[dict]) -> str:
         return self._assistant.ask(message, history_to_context(history))
-
-
-def create_configured_gemini_bridge(
-    history_limit: int,
-    system_prompt_path: str | Path | None = None,
-    include_system_prompt: bool = True,
-) -> GeminiBridge:
-    """Build every Gemini client with the same configured model and timeout."""
-    return GeminiBridge(
-        credentials=settings.load_gemini_credentials(),
-        history_limit=history_limit,
-        timeout_seconds=settings.GEMINI_TIMEOUT_SECONDS,
-        system_prompt_path=system_prompt_path,
-        include_system_prompt=include_system_prompt,
-    )
