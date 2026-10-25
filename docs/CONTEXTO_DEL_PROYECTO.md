@@ -76,6 +76,8 @@ Antes de sustituir el fichero se crea o reemplaza `state/conversation.jsonl.bak`
 
 Esta memoria se guarda únicamente en los ficheros locales indicados. El código actual no la sincroniza con Obsidian ni la convierte a notas Markdown.
 
+**Plan pendiente (sin implementar):** [docs/plans/knowledge_graph_memory_plan.md](plans/knowledge_graph_memory_plan.md) describe una memoria en grafo. Las entidades y relaciones se guardarían con fechas en SQLite, Gemini las extraería tras cada intercambio y se verían en directo en una página web con SSE servida por el servidor de `:8765`. Ese servidor pasaría a ser un sitio con página de inicio y menú de hamburguesa hacia `/deposito` (el panel actual, que hoy está en `/`) y `/memoria`. Ese plan sustituye a [docs/plans/obsidian_git_memory_implementation_plan.md](plans/obsidian_git_memory_implementation_plan.md), que queda como fase opcional.
+
 ## Flujo de voz
 
 ### Reconocimiento

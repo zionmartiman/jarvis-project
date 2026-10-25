@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" width="900" height="520" font-family="Segoe UI, Roboto, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8892a6"/>
+    </marker>
+    <marker id="arrowOld" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4b5263"/>
+    </marker>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#80ed99" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#80ed99" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="900" height="520" fill="#0f111a"/>
+  <text x="24" y="34" fill="#e6e9f2" font-size="18" font-weight="600">Memoria de Jarvis</text>
+  <text x="24" y="54" fill="#8892a6" font-size="12">Maqueta ilustrativa (no es una captura real): así se vería el grafo tras decir «Ana se ha mudado a Madrid».</text>
+
+  <!-- Relaciones -->
+  <!-- usuario - ana -->
+  <line x1="450" y1="270" x2="292" y2="190" stroke="#8892a6" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="318" y="213" width="86" height="18" rx="4" fill="#0f111a"/>
+  <text x="361" y="226" fill="#b8c0d4" font-size="11" text-anchor="middle">hermana de</text>
+
+  <!-- ana - valencia (caducada) -->
+  <line x1="256" y1="168" x2="130" y2="118" stroke="#4b5263" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrowOld)"/>
+  <rect x="120" y="128" width="130" height="32" rx="4" fill="#0f111a"/>
+  <text x="185" y="142" fill="#6b7386" font-size="11" text-anchor="middle">vivía en</text>
+  <text x="185" y="155" fill="#6b7386" font-size="10" text-anchor="middle">hasta 2026-11-02</text>
+
+  <!-- ana - madrid (nueva) -->
+  <line x1="262" y1="204" x2="165" y2="330" stroke="#80ed99" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="180" y="252" width="80" height="18" rx="4" fill="#0f111a"/>
+  <text x="220" y="265" fill="#80ed99" font-size="11" text-anchor="middle">vive en</text>
+
+  <!-- usuario - raspberry -->
+  <line x1="478" y1="248" x2="618" y2="170" stroke="#8892a6" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="520" y="196" width="60" height="18" rx="4" fill="#0f111a"/>
+  <text x="550" y="209" fill="#b8c0d4" font-size="11" text-anchor="middle">tiene</text>
+
+  <!-- usuario - deposito -->
+  <line x1="480" y1="286" x2="640" y2="360" stroke="#8892a6" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="520" y="313" width="100" height="18" rx="4" fill="#0f111a"/>
+  <text x="570" y="326" fill="#b8c0d4" font-size="11" text-anchor="middle">es dueño de</text>
+
+  <!-- raspberry - proyecto -->
+  <line x1="670" y1="188" x2="760" y2="262" stroke="#8892a6" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="690" y="212" width="86" height="18" rx="4" fill="#0f111a"/>
+  <text x="733" y="225" fill="#b8c0d4" font-size="11" text-anchor="middle">ejecuta</text>
+
+  <!-- Nodos -->
+  <!-- usuario -->
+  <circle cx="450" cy="270" r="36" fill="#f72585"/>
+  <text x="450" y="275" fill="#fff" font-size="13" font-weight="600" text-anchor="middle">Usuario</text>
+
+  <!-- ana -->
+  <circle cx="272" cy="186" r="26" fill="#4cc9f0"/>
+  <text x="272" y="191" fill="#0f111a" font-size="13" font-weight="600" text-anchor="middle">Ana</text>
+
+  <!-- valencia (antigua) -->
+  <circle cx="110" cy="112" r="22" fill="#80ed99" opacity="0.45"/>
+  <text x="110" y="116" fill="#0f111a" font-size="11" font-weight="600" text-anchor="middle">Valencia</text>
+
+  <!-- madrid (nuevo, con halo) -->
+  <circle cx="150" cy="345" r="46" fill="url(#glow)"/>
+  <circle cx="150" cy="345" r="22" fill="#80ed99" stroke="#ffffff" stroke-width="2"/>
+  <text x="150" y="349" fill="#0f111a" font-size="12" font-weight="700" text-anchor="middle">Madrid</text>
+  <text x="150" y="388" fill="#80ed99" font-size="11" text-anchor="middle">nuevo ahora mismo</text>
+
+  <!-- raspberry -->
+  <circle cx="645" cy="160" r="26" fill="#f9c74f"/>
+  <text x="645" y="157" fill="#0f111a" font-size="10" font-weight="600" text-anchor="middle">Raspberry</text>
+  <text x="645" y="169" fill="#0f111a" font-size="10" font-weight="600" text-anchor="middle">Pi</text>
+
+  <!-- deposito -->
+  <circle cx="660" cy="368" r="26" fill="#f9c74f"/>
+  <text x="660" y="372" fill="#0f111a" font-size="11" font-weight="600" text-anchor="middle">Depósito</text>
+
+  <!-- proyecto -->
+  <circle cx="780" cy="282" r="26" fill="#b388ff"/>
+  <text x="780" y="286" fill="#0f111a" font-size="11" font-weight="600" text-anchor="middle">Jarvis</text>
+
+  <!-- Leyenda -->
+  <rect x="640" y="436" width="236" height="64" rx="8" fill="#171a26" stroke="#2a2f42"/>
+  <circle cx="660" cy="454" r="6" fill="#f72585"/><text x="672" y="458" fill="#b8c0d4" font-size="11">usuario</text>
+  <circle cx="660" cy="474" r="6" fill="#4cc9f0"/><text x="672" y="478" fill="#b8c0d4" font-size="11">persona</text>
+  <circle cx="738" cy="454" r="6" fill="#80ed99"/><text x="750" y="458" fill="#b8c0d4" font-size="11">lugar</text>
+  <circle cx="738" cy="474" r="6" fill="#f9c74f"/><text x="750" y="478" fill="#b8c0d4" font-size="11">dispositivo</text>
+  <circle cx="818" cy="454" r="6" fill="#b388ff"/><text x="830" y="458" fill="#b8c0d4" font-size="11">proyecto</text>
+  <line x1="800" y1="474" x2="826" y2="474" stroke="#4b5263" stroke-width="2" stroke-dasharray="4 3"/><text x="832" y="478" fill="#b8c0d4" font-size="11">caducada</text>
+
+  <!-- Barra temporal -->
+  <rect x="24" y="470" width="560" height="30" rx="8" fill="#171a26" stroke="#2a2f42"/>
+  <polygon points="40,478 40,492 52,485" fill="#e6e9f2"/>
+  <rect x="68" y="483" width="490" height="4" rx="2" fill="#2a2f42"/>
+  <rect x="68" y="483" width="430" height="4" rx="2" fill="#4cc9f0"/>
+  <circle cx="498" cy="485" r="7" fill="#4cc9f0"/>
+  <text x="566" y="489" fill="#8892a6" font-size="10" text-anchor="end">evento 42</text>
+</svg>

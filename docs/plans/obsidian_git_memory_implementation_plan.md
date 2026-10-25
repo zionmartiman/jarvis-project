@@ -2,7 +2,7 @@
 
 > **Nota (refactor):** las rutas de este documento son anteriores a la reestructuración en el paquete `jarvis/`. Equivalencias: `jarvis/application/conversation/turn_handler.py` → `jarvis/application/conversation/`; `jarvis/application/memory/conversation_memory.py` → `jarvis/application/memory/conversation_memory.py` (+ `jarvis/infrastructure/memory/jsonl_backend.py`); `core/intents.py` → `jarvis/domain/intents.py`; `jarvis/config/settings.py` → `jarvis/config/settings.py`; `bridge/gemini_bridge.py` → `jarvis/infrastructure/assistants/gemini.py`; `bridge/vento_bridge.py` → `jarvis/infrastructure/assistants/vento.py`; `prompts/system.md` → `prompts/system.md`; los tests están en `tests/unit/`. Los módulos nuevos que se creen deben respetar las capas descritas en `docs/CONTEXTO_DEL_PROYECTO.md` («Arquitectura por capas»).
 
-**Estado:** plan pendiente de implementación  
+**Estado:** sustituido como camino principal por [knowledge_graph_memory_plan.md](knowledge_graph_memory_plan.md) (memoria en grafo SQLite con visualización web en tiempo real); su exportación a Obsidian queda como fase opcional de ese plan  
 **Fecha de preparación:** 2026-10-13  
 **Alcance:** memoria duradera consultable en Jarvis, visualizable con Obsidian en el ordenador y sincronizada mediante un repositorio privado de GitHub.
 
