@@ -1,6 +1,6 @@
 # Plan de refactor y reestructuración de Jarvis
 
-> **Estado:** en ejecución (preparado el 2026-10-25). Fases 0 y 1 completadas (pendiente de commit de punto de control); fases 2 a 7 pendientes.
+> **Estado:** en ejecución (preparado el 2026-10-25). Fases 0 y 1 completadas (commit de punto de control `7e46e0f`); fases 2 a 7 pendientes.
 > Quien ejecute este plan debe marcar aquí cada fase como completada al terminarla.
 
 ## Entorno de ejecución (restricción obligatoria)
@@ -498,7 +498,7 @@ en la tabla de comentarios cualquier incidencia. Si todo ha ido bien, escribe «
 | `git status` revisado (§3.2, punto 5) | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
 | Textos y frases idénticos (§3.2, punto 6) | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
 | `CONTEXTO_DEL_PROYECTO.md` actualizado (§3.2, punto 7) | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
-| Commit de punto de control aprobado (§3.2, punto 9) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Commit de punto de control aprobado (§3.2, punto 9) | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
 | Secretos fuera de Git (`git ls-files`) | — | ☑ | — | — | — | — | — | — |
 | Subpasos 3.1 a 3.7 completados | — | — | — | ☐ | — | — | — | — |
 | Comparación línea a línea con `core/conversation.py` | — | — | — | — | — | ☐ | — | — |
@@ -514,8 +514,8 @@ en la tabla de comentarios cualquier incidencia. Si todo ha ido bien, escribe «
 
 | Fase | Comentarios | Hash del commit |
 | --- | --- | --- |
-| 0 — Red de seguridad | `compileall` se ejecutó sobre los paquetes actuales (`jarvis/` aún no existe). `test_main_gemini_config.py` se omite con `skip`; además se movió `import main` dentro del test, porque un `skip` no evita el error de importación a nivel de módulo. Los tests nuevos importan los fakes de `test_conversation_model_switch.py` (`from tests...`) y `tests/arduino_stub.py` sustituye el stub de `Arduino` que estaba duplicado en un test. Se corrigió además la doc de §1.4 (sin selección «uno/dos», acuse «Dime», botón D3 «¿Sí?» en espera y locución, aviso de apagado completo). | Pendiente: esperando permiso del propietario |
-| 1 — Limpieza y secretos | Sin desviaciones del plan. `.gitignore`: la regla suelta `/state/rainwater_tank_state.json` se absorbe en `/state/*`. `git rm --cached` no toca el disco: `state/bridge.env`, `state/conversation.jsonl(.bak)` y `.vscode/sftp.json` siguen en local. `ARDUINO/main.cs` movido con 100 % de similitud (sin cambios). Los enlaces `ARDUINO/main.cs` de `CONTEXTO_DEL_PROYECTO.md` ya apuntaban a la ruta nueva. **Hallazgo:** la contraseña SSH del `sftp.json` local es igual que el nombre de usuario (`jarvis`): al rotarla hay que elegir una realmente distinta. Siguen en el historial de Git: token del puente, clave del agente y esa contraseña. | Pendiente: esperando permiso del propietario |
+| 0 — Red de seguridad | `compileall` se ejecutó sobre los paquetes actuales (`jarvis/` aún no existe). `test_main_gemini_config.py` se omite con `skip`; además se movió `import main` dentro del test, porque un `skip` no evita el error de importación a nivel de módulo. Los tests nuevos importan los fakes de `test_conversation_model_switch.py` (`from tests...`) y `tests/arduino_stub.py` sustituye el stub de `Arduino` que estaba duplicado en un test. Se corrigió además la doc de §1.4 (sin selección «uno/dos», acuse «Dime», botón D3 «¿Sí?» en espera y locución, aviso de apagado completo). | `7e46e0f` |
+| 1 — Limpieza y secretos | Sin desviaciones del plan. `.gitignore`: la regla suelta `/state/rainwater_tank_state.json` se absorbe en `/state/*`. `git rm --cached` no toca el disco: `state/bridge.env`, `state/conversation.jsonl(.bak)` y `.vscode/sftp.json` siguen en local. `ARDUINO/main.cs` movido con 100 % de similitud (sin cambios). Los enlaces `ARDUINO/main.cs` de `CONTEXTO_DEL_PROYECTO.md` ya apuntaban a la ruta nueva. **Hallazgo:** la contraseña SSH del `sftp.json` local es igual que el nombre de usuario (`jarvis`): al rotarla hay que elegir una realmente distinta. Siguen en el historial de Git: token del puente, clave del agente y esa contraseña. | `7e46e0f` |
 | 2 — Paquete `jarvis/`: config, dominio y puertos | | |
 | 3 — Infraestructura | | |
 | 4 — Aplicación: hilos, depósito, botones y memoria | | |
