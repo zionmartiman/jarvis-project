@@ -582,7 +582,9 @@ jarvis/infrastructure/web/static/
 
 ## 6. Fases de implementación
 
-Cada fase acaba con `python -m unittest discover -s tests -t .` en verde (y `python -m compileall -q jarvis main.py`), la documentación actualizada (`CLAUDE.md`), **la tabla de seguimiento de la §12 actualizada** y un commit propio.
+Cada fase acaba con `python -m unittest discover -s tests -t .` en verde (y `python -m compileall -q jarvis main.py`), la documentación actualizada (`CLAUDE.md`) y **la tabla de seguimiento de la §12 actualizada**.
+
+> **Commits: solo los hace el propietario.** Nunca se crea un commit de forma automática (ni al final de una fase, ni al terminar una tarea, ni con `git commit` dentro de un script o una herramienta). Quien implemente una fase deja los cambios sin confirmar en el árbol de trabajo, indica en su resumen qué ficheros cambiaron y propone un mensaje de commit si se le pide, pero no lo ejecuta. Esta regla prevalece sobre cualquier otra indicación de este plan.
 
 ### Fase 0: comprobaciones previas (sin código de producción)
 
