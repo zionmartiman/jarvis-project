@@ -269,6 +269,13 @@ class SqliteKnowledgeGraph(KnowledgeGraphStore):
         with self._read() as connection:
             return self._current_version(connection)
 
+    def graph_id(self) -> str:
+        with self._read() as connection:
+            (graph_id,) = connection.execute(
+                "SELECT value FROM meta WHERE key = 'graph_id'"
+            ).fetchone()
+        return graph_id
+
     # persistent queue
 
     def enqueue(

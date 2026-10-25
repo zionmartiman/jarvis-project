@@ -148,12 +148,13 @@ def build_application(settings: Settings) -> Application:
         ),
         settings.tank.poll_interval_seconds,
     )
+    knowledge = build_knowledge(settings)
     web_server = JarvisWebServer(
         host=settings.web.host,
         port=settings.web.port,
         static_dir=STATIC_DIR,
         latest_level=tank_monitor.latest_level,
-        memory_feed=None,
+        memory_feed=knowledge,
     )
 
     memory = ConversationMemory(
@@ -163,8 +164,7 @@ def build_application(settings: Settings) -> Application:
         compact_after_records=settings.memory.compact_after_messages,
         recent_interactions=settings.memory.recent_exchanges,
     )
-    knowledge = build_knowledge(settings)
-    listener = SentenceListener(recognizer, status)
+    listener =SentenceListener(recognizer, status)
     selector = AssistantSelector(lambda model: build_assistant(model, settings), voice)
     orchestrator = ConversationOrchestrator(
         voice=voice,

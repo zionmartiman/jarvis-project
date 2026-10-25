@@ -6,6 +6,18 @@
   --site-text-muted: #94a3b8;
   --site-accent: #00f2fe;
   --site-header-height: 56px;
+
+  /* Memory graph: one colour per entity type, plus its links. */
+  --graph-persona: #4ea8ff;
+  --graph-lugar: #3ddc97;
+  --graph-proyecto: #ffb454;
+  --graph-dispositivo: #c792ea;
+  --graph-preferencia: #ff6b9d;
+  --graph-tarea: #ffd866;
+  --graph-evento: #5ce1e6;
+  --graph-concepto: #9aa7b8;
+  --graph-link: rgba(148, 163, 184, 0.7);
+  --graph-link-expired: rgba(148, 163, 184, 0.3);
 }
 
 @media (prefers-color-scheme: light) {
@@ -16,6 +28,17 @@
     --site-text: #0f172a;
     --site-text-muted: #475569;
     --site-accent: #0072ff;
+
+    --graph-persona: #1d6fd1;
+    --graph-lugar: #12935d;
+    --graph-proyecto: #c77700;
+    --graph-dispositivo: #8a4fbf;
+    --graph-preferencia: #d12f6b;
+    --graph-tarea: #a98300;
+    --graph-evento: #0b8b94;
+    --graph-concepto: #5b6677;
+    --graph-link: rgba(71, 85, 105, 0.7);
+    --graph-link-expired: rgba(71, 85, 105, 0.3);
   }
 }
 

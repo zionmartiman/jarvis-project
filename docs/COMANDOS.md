@@ -134,6 +134,14 @@ Fusionar una entidad duplicada en otra (por clave o alias); muestra los eventos 
 python -m jarvis.cli.merge_entities ana_garcia ana
 ```
 
+Ver el grafo en directo en el navegador (cualquier equipo de la red):
+
+```text
+http://<IP-de-la-Raspberry>:8765/memoria
+```
+
+Inicio: `/`; depósito: `/deposito`. Por línea de comandos: `curl http://localhost:8765/api/memory/graph` (snapshot), `curl "http://localhost:8765/api/memory/events?since=0&limit=100"` (eventos) y `curl -N http://localhost:8765/api/memory/stream?since=0` (SSE; Ctrl+C para salir). El grafo cambia en la página mientras `rebuild_graph --process` o Jarvis escriben en la base de datos (los cambios de otro proceso tardan hasta 1 s en verse).
+
 ## Tests en el PC de desarrollo
 
 ```bash

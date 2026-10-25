@@ -156,6 +156,9 @@ class KnowledgeGraphMemory(KnowledgeGraphFeed):
     def current_version(self) -> int:
         return self._store.current_version()
 
+    def graph_id(self) -> str:
+        return self._store.graph_id()
+
     def wait_for_change(self, after_version: int, timeout: float) -> None:
         """Changes made by this process wake it early; those of other processes wait the timeout."""
         with self._changed:

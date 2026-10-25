@@ -63,6 +63,10 @@ class KnowledgeGraphStore(ABC):
         """Version of the newest event (0 if there is none)."""
 
     @abstractmethod
+    def graph_id(self) -> str:
+        """Identifier of this graph; it changes when the database is rebuilt from scratch."""
+
+    @abstractmethod
     def enqueue(
         self, kind: str, user_text: str, assistant_text: str, observed_at: str, max_pending: int
     ) -> None:
@@ -110,6 +114,10 @@ class KnowledgeGraphFeed(ABC):
 
     @abstractmethod
     def current_version(self) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    def graph_id(self) -> str:
         raise NotImplementedError
 
     @abstractmethod

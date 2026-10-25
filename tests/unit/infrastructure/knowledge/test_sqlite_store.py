@@ -134,6 +134,7 @@ class MigrationTest(StoreTestCase):
         reopened = self.open_store()
 
         self.assertEqual(reopened.snapshot().graph_id, graph_id)
+        self.assertEqual(reopened.graph_id(), graph_id)
         self.assertEqual(reopened.current_version(), 1)
         self.assertEqual(self.query("SELECT COUNT(*) FROM entities"), [(1,)])
 

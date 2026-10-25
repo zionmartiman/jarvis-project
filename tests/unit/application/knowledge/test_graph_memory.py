@@ -151,6 +151,7 @@ class QueueAndProcessTest(GraphMemoryTestCase):
 
         self.assertEqual(memory.snapshot(), self.store.snapshot())
         self.assertEqual(memory.current_version(), 1)
+        self.assertEqual(memory.graph_id(), self.store.graph_id())
         self.assertEqual([event.op for event in memory.events_since(0, 10)], ["entity_created"])
 
 
