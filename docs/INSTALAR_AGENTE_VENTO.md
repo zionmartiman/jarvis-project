@@ -1,3 +1,10 @@
+# Instalar el agente de dispositivo de Vento en la Raspberry
+
+Script para reinstalar el agente de Vento (`jarvis_pi`) si se desconecta. Requiere Linux ARM64.
+Sustituye `<DEVICE_KEY>` por la clave de dispositivo que muestra Vento al registrar el equipo;
+no la guardes en el repositorio.
+
+```bash
 set -eu
 case "$(uname -m)" in
   aarch64|arm64) ;;
@@ -11,7 +18,7 @@ cat > config.json <<'VENTO_DEVICE_CONFIG'
   "host": "https://cloud.vento.build",
   "username": "",
   "token": "",
-  "device_key": "vdk_9fed33b8880e48a9b3b9b665a4b53f8f_08d7aded24844d7db7440bfe1d81f97e7b9f0917501b4509a3511abdf4da5699",
+  "device_key": "<DEVICE_KEY>",
   "device_name": "jarvis_pi",
   "network": "workspacedemarti",
   "monitor_interval_seconds": 30,
@@ -32,3 +39,4 @@ cat > config.json <<'VENTO_DEVICE_CONFIG'
 }
 VENTO_DEVICE_CONFIG
 nohup ./ventoagent -config ./config.json -no-gui -no-tray > ./ventoagent-background.log 2>&1 < /dev/null &
+```

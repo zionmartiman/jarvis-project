@@ -2,5 +2,15 @@
 *.pyc
 __pycache__/
 
-# Estado local generado por el medidor
-/state/rainwater_tank_state.json
+# Virtual environment and temporary files
+.venv/
+*.tmp
+
+# Local runtime state and private configuration (never versioned).
+# Includes bridge.env, conversation.jsonl(.bak) and rainwater_tank_state.json.
+/state/*
+!/state/.gitkeep
+!/state/*.example
+
+# SFTP credentials for the Raspberry Pi
+.vscode/sftp.json

@@ -99,6 +99,16 @@ sudo -u jarvis XDG_RUNTIME_DIR=/run/user/$(id -u jarvis) DBUS_SESSION_BUS_ADDRES
 sudo -u jarvis XDG_RUNTIME_DIR=/run/user/$(id -u jarvis) DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u jarvis)/bus systemctl --user start jarvis-voice
 ```
 
+## Sincronizar con la Raspberry
+
+Traer los cambios de la Raspberry al PC (Windows). Sobrescribe los ficheros locales con el mismo nombre, así que ejecútalo con el árbol de trabajo limpio (`git status`):
+
+```bash
+scp -r jarvis@raspberrypi.local:/home/jarvis/jarvis-project/* "C:\Repositories\jarvis-project"
+```
+
+El mismo comando está en `scripts/hacer pull desde la raspberry.bat`. La ruta remota (`jarvis-project`) no coincide con la de las secciones anteriores (`jarvis-voice`): confirma cuál es la real en la Raspberry antes de usarlo. La contraseña SSH no se guarda en el repositorio; para subir con la extensión SFTP de VS Code, copia `.vscode/sftp.example.json` a `.vscode/sftp.json` (ignorado por Git) y rellena `password`.
+
 ## Reiniciar o apagar
 
 ```bash

@@ -1,17 +1,12 @@
 import tempfile
-import sys
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
-from types import ModuleType
 
-arduino_package = ModuleType("Arduino")
-arduino_package.__path__ = []
-arduino_connection = ModuleType("Arduino.arduino_mega_connection")
-arduino_connection.ArduinoMegaConnection = object
-sys.modules.setdefault("Arduino", arduino_package)
-sys.modules.setdefault("Arduino.arduino_mega_connection", arduino_connection)
+from tests import arduino_stub
+
+arduino_stub.install()
 
 from Sensors.rainwater_tank_meter import RainwaterTankLevel, RainwaterTankMeter
 

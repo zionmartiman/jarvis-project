@@ -12,7 +12,7 @@ Este documento describe lo que está implementado en el código de este reposito
 Micrófono USB
   -> captura local de audio
   -> Vosk local (palabra de activación y transcripción)
-  -> selección: Gemini o Vento
+  -> agente activo: Gemini (por defecto) o Vento (se alterna con «cambiar de modelo»)
   -> respuesta de texto
   -> Azure Speech (voz es-ES-AlvaroNeural)
   -> reproducción PCM por aplay y salida de audio
@@ -51,11 +51,11 @@ Las conexiones aparecen documentadas en el firmware [ARDUINO/main.cs](ARDUINO/ma
 
 1. `main.py` construye el micrófono, el reconocedor Vosk, Azure Speech, la conexión Arduino, el indicador de estado, el monitor de botones, el medidor y el servidor web.
 2. El monitor de botones, el medidor y el servidor web se inician antes de entrar en el bucle de conversación.
-3. Jarvis solicita por voz elegir Gemini diciendo «uno» o «1», o Vento diciendo «dos» o «2».
-4. Solo se crea el puente elegido. Gemini usa por defecto `gemini-2.5-flash`; Vento envía texto al puente configurado.
+3. Jarvis dice «Sistemas listos.» y prepara **Gemini** como agente inicial; no hay selección hablada («uno»/«dos») al arrancar. Si Gemini no se puede preparar (por ejemplo, falta `gemini.env`), dice «No puedo preparar Gemini.» y sigue funcionando.
+4. Durante una conversación, la frase «cambiar de modelo» alterna entre Gemini y Vento: crea el puente del otro agente, dice «Cambiando a Vento.» o «Cambiar a Gemini.» y descarta el audio pendiente del micrófono. Si el otro agente no se puede preparar, dice «No puedo preparar Vento.» (o Gemini) y conserva el actual. Gemini usa por defecto `gemini-2.5-flash`; Vento envía texto al puente configurado.
 5. La conversación conserva hasta seis elementos de historial temporal (tres pares usuario/asistente) durante la sesión activa. Ese historial se reinicia al volver al modo de espera; además existe una memoria duradera local descrita en la sección siguiente.
 
-La síntesis de voz Azure se configura al construir el sistema, antes de elegir el agente. Por tanto, Azure y su archivo de credenciales son necesarios incluso si se selecciona Gemini. El modelo de Vosk se carga localmente desde `models/vosk-model-small-es-0.42`.
+La síntesis de voz Azure se configura al construir el sistema, antes de preparar el agente. Por tanto, Azure y su archivo de credenciales son necesarios siempre, con cualquiera de los dos agentes. Las credenciales de Vento (`state/bridge.env`) solo se leen la primera vez que se cambia a Vento. El modelo de Vosk se carga localmente desde `models/vosk-model-small-es-0.42`.
 
 ### Memoria de conversación
 
@@ -82,7 +82,7 @@ Esta memoria se guarda únicamente en los ficheros locales indicados. El código
 
 Vosk procesa el audio en la Raspberry. Según la documentación y el código de [speech/vosk_recognizer.py](speech/vosk_recognizer.py), el audio del micrófono no se envía a Gemini ni a Vento: el puente de Vento recibe texto y el historial, no audio.
 
-Tras seleccionar un agente, Jarvis queda esperando la palabra «Jarvis». La detección se realiza sobre resultados finales de Vosk. Al activarse, Jarvis pronuncia «Sí señor?» y después escucha la instrucción.
+Tras preparar el agente inicial, Jarvis queda esperando la palabra «Jarvis». La detección se realiza sobre resultados finales de Vosk. Al activarse, Jarvis pronuncia «Dime» y después escucha la instrucción.
 
 ### Fin de frase
 
@@ -90,7 +90,7 @@ No hay un corte configurado como «1,5 segundos exactos». Vosk decide cuándo f
 
 ### Respuesta
 
-El texto se envía al agente elegido. Cuando llega la respuesta, Azure Speech sintetiza voz con `es-ES-AlvaroNeural`. Se configura audio PCM mono de 24 kHz y se reproduce progresivamente mediante `aplay`; no se genera un archivo de audio completo como paso obligatorio intermedio. Una exclusión mutua local evita que dos reproducciones usen el altavoz a la vez.
+El texto se envía al agente activo. Cuando llega la respuesta, Azure Speech sintetiza voz con `es-ES-AlvaroNeural`. Se configura audio PCM mono de 24 kHz y se reproduce progresivamente mediante `aplay`; no se genera un archivo de audio completo como paso obligatorio intermedio. Una exclusión mutua local evita que dos reproducciones usen el altavoz a la vez.
 
 ## Indicador RGB de estado
 
@@ -103,7 +103,7 @@ El mapeo del orquestador y el firmware versionados es:
 | Procesamiento/espera de respuesta (`PROCESSING`) | Azul con animación de respiración |
 | Reproducción de voz (`SPEAKING`) | Amarillo intermitente |
 
-El azul sube y baja con una semionda de un segundo; el amarillo cambia de estado cada 125 ms. Al detectar «Jarvis», primero se reproduce el acuse «Sí señor?» (estado de voz/amarillo) y luego se abre la escucha de la instrucción (verde). Al terminar una instrucción, el estado pasa a azul mientras se consulta al agente; al reproducir la respuesta vuelve a amarillo.
+El azul sube y baja con una semionda de un segundo; el amarillo cambia de estado cada 125 ms. Al detectar «Jarvis», primero se reproduce el acuse «Dime» (estado de voz/amarillo) y luego se abre la escucha de la instrucción (verde). Al terminar una instrucción, el estado pasa a azul mientras se consulta al agente; al reproducir la respuesta vuelve a amarillo.
 
 «Descansa» y otras frases reservadas terminan la conversación activa y devuelven el programa a espera de «Jarvis»; no detienen el proceso. También existen frases para solicitar apagado o reinicio, con confirmación hablada. La implementación de las frases está en [core/intents.py](core/intents.py), y las acciones de sistema en [system/power_control.py](system/power_control.py). Apagar/reiniciar depende de que el sistema operativo permita `sudo -n` para esos comandos.
 
@@ -111,9 +111,9 @@ El azul sube y baja con una semionda de un segundo; el amarillo cambia de estado
 
 Ambos pulsadores se sondean independientemente del medidor mediante [system/arduino_button_monitor.py](system/arduino_button_monitor.py). El monitor consulta `BUTTON STATUS` al Arduino cada 0,1 segundos; el firmware responde `BUTTON_SHUTDOWN` para el botón de D2, `BUTTON_INTERRUPT` para el botón de D3 y `BUTTON_IDLE` cuando no hay una pulsación pendiente. Las dos entradas tienen antirrebote y detección de flanco en [ARDUINO/main.cs](ARDUINO/main.cs).
 
-El botón de D2 activa el apagado maestro en cualquier fase: detiene la captura del micrófono, interrumpe la síntesis/reproducción activa de Azure y `aplay`, anuncia «Apagado manual accionado!, apagando sistemas.» y llama a `poweroff`. Las operaciones para interrumpir el audio están en [speech/azure_synthesizer.py](speech/azure_synthesizer.py) y [audio/player.py](audio/player.py).
+El botón de D2 activa el apagado maestro en cualquier fase: detiene la captura del micrófono, interrumpe la síntesis/reproducción activa de Azure y `aplay`, anuncia «Apagado manual accionado!, apagando sistemas. Venga, chao!» y llama a `poweroff`. Las operaciones para interrumpir el audio están en [speech/azure_synthesizer.py](speech/azure_synthesizer.py) y [audio/player.py](audio/player.py).
 
-El botón de D3 solo actúa mientras Jarvis reproduce en voz alta una respuesta de Gemini o Vento. Corta esa respuesta, dice «Sí, dime» y el siguiente paso del diálogo escucha una nueva instrucción. Pulsarlo durante otras locuciones, durante la escucha o mientras el modelo todavía está generando texto no interrumpe esas fases.
+El botón de D3 solo actúa mientras hay una respuesta de Gemini o Vento en curso, en cualquiera de sus dos fases: mientras Jarvis **espera** a que el modelo genere el texto (abandona la petición y no reproduce la respuesta tardía) o mientras **reproduce** en voz alta la respuesta (corta la locución). En ambos casos dice «¿Sí?» y el siguiente paso del diálogo escucha una nueva instrucción. Pulsarlo durante otras locuciones (acuse «Dime», confirmaciones, avisos) o durante la escucha no interrumpe esas fases.
 
 La solicitud de apagado del sistema depende de que `sudo -n /usr/sbin/poweroff` esté autorizado para el usuario que ejecuta Jarvis. El botón de D2 no solicita confirmación hablada.
 
@@ -166,9 +166,9 @@ El código del firmware declara que el indicador independiente es rojo. El usuar
 
 ### Agente de dispositivo Vento
 
-El archivo auxiliar [docs/instalar el agent en la rasberry para cuando se desconecta.txt](docs/instalar%20el%20agent%20en%20la%20rasberry%20para%20cuando%20se%20desconecta.txt) describe otro componente: descarga un agente Linux ARM64 y configura funciones de sistema, archivos, comandos y notificaciones, además de `remote_agent_mode: full-access`. Esa configuración permite inferir la intención de dar acceso amplio al agente de dispositivo, pero el repositorio no permite verificar qué proceso está instalado/ejecutándose en la Raspberry ni los permisos efectivos del usuario del sistema. No confundir esa configuración externa con el puente de voz `VentoBridge`.
+El documento auxiliar [docs/INSTALAR_AGENTE_VENTO.md](INSTALAR_AGENTE_VENTO.md) describe otro componente: descarga un agente Linux ARM64 y configura funciones de sistema, archivos, comandos y notificaciones, además de `remote_agent_mode: full-access`. Esa configuración permite inferir la intención de dar acceso amplio al agente de dispositivo, pero el repositorio no permite verificar qué proceso está instalado/ejecutándose en la Raspberry ni los permisos efectivos del usuario del sistema. No confundir esa configuración externa con el puente de voz `VentoBridge`.
 
-Ese archivo contiene un valor con forma de clave de dispositivo. No se reproduce aquí. Si corresponde a una clave real o vigente, debe considerarse expuesta y revocarse/rotarse; los secretos deberían mantenerse fuera del repositorio.
+En ese documento la clave de dispositivo está sustituida por el marcador `<DEVICE_KEY>`. La clave real que antes estaba en el fichero sigue en el historial de Git (ver «Secretos expuestos en el historial de Git»).
 
 ## Configuración y credenciales
 
@@ -176,10 +176,21 @@ Ese archivo contiene un valor con forma de clave de dispositivo. No se reproduce
 | --- | --- | --- |
 | Azure Speech | `~/.config/jarvis-voice/azure.env` | `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` |
 | Gemini | `~/.config/jarvis-voice/gemini.env` | `GEMINI_API_KEY`, opcionalmente `GEMINI_MODEL` |
-| Puente Vento | `state/bridge.env` | `BRIDGE_URL`, `BRIDGE_TOKEN` |
+| Puente Vento | `state/bridge.env` (plantilla: `state/bridge.env.example`) | `BRIDGE_URL`, `BRIDGE_TOKEN` |
 | Modelo Vosk | `models/vosk-model-small-es-0.42` | Archivos del modelo local español |
 | Memoria conversacional | `state/conversation.jsonl` y `state/conversation.jsonl.bak` | Historial JSONL local y copia previa a compactaciones |
 | Estado del depósito | `state/rainwater_tank_state.json` | Última medida válida, generada localmente por el programa y excluida de Git |
+| Acceso SFTP desde VS Code | `.vscode/sftp.json` (plantilla: `.vscode/sftp.example.json`) | Host, usuario y contraseña SSH de la Raspberry; excluido de Git |
+
+Todo el contenido de `state/` está excluido de Git (`/state/*` en `.gitignore`) salvo `state/.gitkeep` y las plantillas `state/*.example`. Las credenciales y el historial de conversación se crean y mantienen solo en cada equipo.
+
+### Secretos expuestos en el historial de Git
+
+Los secretos y las conversaciones privadas ya no están versionados (`state/bridge.env`, `state/conversation.jsonl(.bak)` y `.vscode/sftp.json` se sacaron del índice; las contraseñas y la clave de dispositivo se eliminaron de `docs/`), pero **siguen en el historial de Git**, que no se ha reescrito. El propietario debe rotar:
+
+- el token del puente Vento (`BRIDGE_TOKEN`),
+- la clave de dispositivo del agente Vento,
+- la contraseña SSH del usuario `jarvis` de la Raspberry. En la copia local de `.vscode/sftp.json` coincide con el nombre de usuario, por lo que es débil; cámbiala por una distinta, no solo por una nueva igual de corta.
 
 Las rutas, dispositivo de audio, puerto serie, modelo Gemini, voz Azure, intervalo de lectura y rutas de socket están centralizados en [config/settings.py](config/settings.py) y en los valores por defecto de sus clases. Este documento no contiene claves ni tokens.
 
@@ -193,7 +204,7 @@ Estos puntos afectan a la diferencia entre el repositorio y la instalación desc
 4. **LED de alerta:** contrastar el montaje físico y la versión desplegada del firmware con la declaración roja de D12.
 5. **Parámetros físicos:** confirmar que el sensor está instalado y que 80 cm/9 cm y la capacidad estimada de 1000 litros corresponden al depósito real.
 6. **Permisos de apagado/reinicio:** confirmar la unidad de ejecución y las reglas `sudoers`; la presencia del código no prueba que el sistema autorice esas órdenes.
-7. **Seguridad de red y credenciales:** revisar si el puerto 8765 está limitado a la LAN deseada; retirar secretos del repositorio y rotar las claves que hayan quedado expuestas. El puente Vento incorpora su token en la URL de petición, por lo que también deben considerarse los registros HTTP del servicio intermedio.
+7. **Seguridad de red y credenciales:** revisar si el puerto 8765 está limitado a la LAN deseada; rotar las claves que quedaron expuestas en el historial de Git (los ficheros ya no se versionan; ver «Secretos expuestos en el historial de Git»). El puente Vento incorpora su token en la URL de petición, por lo que también deben considerarse los registros HTTP del servicio intermedio.
 
 ## Mapa de código
 
@@ -213,7 +224,19 @@ Estos puntos afectan a la diferencia entre el repositorio y la instalación desc
 
 ## Refactor planificado
 
-Existe un plan de refactor y reestructuración pendiente de ejecución en [docs/PLAN_REFACTOR.md](PLAN_REFACTOR.md): paquete único `jarvis/` por capas, limpieza de backups y código muerto, retirada de secretos de Git y corrección de los tests que fallan actualmente. Mientras no se ejecute, este documento sigue describiendo la estructura actual.
+Existe un plan de refactor y reestructuración en [docs/PLAN_REFACTOR.md](PLAN_REFACTOR.md): paquete único `jarvis/` por capas, limpieza de backups y código muerto, retirada de secretos de Git y corrección de los tests que fallan. Ejecutadas hasta ahora: **Fase 0** (red de seguridad: tests de caracterización y arreglo de los 3 tests rotos) y **Fase 1** (limpieza de backups y código muerto, secretos fuera de Git, documentación movida). El resto de fases está pendiente; mientras no se ejecuten, este documento sigue describiendo la estructura actual del código (`core/`, `bridge/`, `Sensors/`, etc.).
+
+## Pruebas
+
+Los tests se ejecutan en el PC de desarrollo (Windows), no en la Raspberry:
+
+```text
+python -m unittest discover -s tests -t .
+```
+
+Estado actual: 61 tests, 1 omitido (`tests/test_main_gemini_config.py`, que no puede importar `main.py` por el problema de mayúsculas de `Arduino` y se reescribirá en la Fase 6). `tests/` es un paquete (`tests/__init__.py`). Los tests de caracterización de la Fase 0 fijan el comportamiento actual de las frases reservadas (`tests/test_intents.py`), los avisos del depósito (`tests/test_tank_alerts.py`), el parseo y la petición del puente Vento (`tests/test_vento_reply_parsing.py`) y los flujos de conversación (`tests/test_conversation_flows.py`). `tests/arduino_stub.py` registra un paquete `Arduino` falso para poder importar los módulos antiguos.
+
+`read_env_file` (`config/settings.py`) ya elimina las comillas simples o dobles que rodean un valor de los ficheros `.env`.
 
 ## Alcance de esta descripción
 

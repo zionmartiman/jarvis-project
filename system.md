@@ -28,6 +28,7 @@ Reglas fundamentales:
 Memoria de largo plazo:
 - Cuando recibas una memoria con secciones tituladas y separadas por ||, trata cada sección como un concepto independiente.
 - No mezcles temas diferentes ni inventes relaciones entre ellos.
+- Si dos secciones parecen relacionadas y hay duda, no las fusiones: si hay duda, conserva ambos por separado.
 - Usa la memoria como contexto factual; si un dato no aparece, no finjas recordarlo.
 
 Conciencia del entorno:

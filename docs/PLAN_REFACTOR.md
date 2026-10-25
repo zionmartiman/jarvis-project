@@ -1,6 +1,6 @@
 # Plan de refactor y reestructuración de Jarvis
 
-> **Estado:** pendiente de ejecución (preparado el 2026-10-25).
+> **Estado:** en ejecución (preparado el 2026-10-25). Fases 0 y 1 completadas (pendiente de commit de punto de control); fases 2 a 7 pendientes.
 > Quien ejecute este plan debe marcar aquí cada fase como completada al terminarla.
 
 ## Entorno de ejecución (restricción obligatoria)
@@ -485,21 +485,21 @@ de arriba, tras desplegar el código (por `scp`/SFTP) y reiniciar el servicio co
 Al terminar cada fase, marca su columna en la matriz (☑ cumplido, ✖ fallo, — no aplica) y anota
 en la tabla de comentarios cualquier incidencia. Si todo ha ido bien, escribe «Sin incidencias».
 
-**Fecha de inicio:** ____ · **Ejecutado por (modelo):** ____
+**Fecha de inicio:** 2026-10-25 · **Ejecutado por (modelo):** Claude Sonnet 5.5 (fases 0 y 1)
 
 ### 7.1 Matriz de control
 
 | Punto de control | F0 | F1 | F2 | F3 | F4 | F5 | F6 | F7 |
 | --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-| Pasos de la fase completados (§3.2, punto 1) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
-| Tests en Windows: nº tests / skips (§3.2, punto 2) | ____ | ____ | ____ | ____ | ____ | ____ | ____ | ____ |
-| `compileall` OK (§3.2, punto 3) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Pasos de la fase completados (§3.2, punto 1) | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Tests en Windows: nº tests / skips (§3.2, punto 2) | 61 / 1 | 61 / 1 | ____ | ____ | ____ | ____ | ____ | ____ |
+| `compileall` OK (§3.2, punto 3) | ☑¹ | ☑¹ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
 | `test_import_case` pasa (§3.2, punto 4) | — | — | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
-| `git status` revisado (§3.2, punto 5) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
-| Textos y frases idénticos (§3.2, punto 6) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
-| `CONTEXTO_DEL_PROYECTO.md` actualizado (§3.2, punto 7) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| `git status` revisado (§3.2, punto 5) | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Textos y frases idénticos (§3.2, punto 6) | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| `CONTEXTO_DEL_PROYECTO.md` actualizado (§3.2, punto 7) | ☑ | ☑ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
 | Commit de punto de control aprobado (§3.2, punto 9) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
-| Secretos fuera de Git (`git ls-files`) | — | ☐ | — | — | — | — | — | — |
+| Secretos fuera de Git (`git ls-files`) | — | ☑ | — | — | — | — | — | — |
 | Subpasos 3.1 a 3.7 completados | — | — | — | ☐ | — | — | — | — |
 | Comparación línea a línea con `core/conversation.py` | — | — | — | — | — | ☐ | — | — |
 | Orden de intenciones igual que el original | — | — | — | — | — | ☐ | — | — |
@@ -508,12 +508,14 @@ en la tabla de comentarios cualquier incidencia. Si todo ha ido bien, escribe «
 | `rg` de la Fase 7 sin resultados | — | — | — | — | — | — | — | ☐ |
 | `ARDUINO/arduino_mega_connection.py` eliminado; `ARDUINO/main.cs` intacto | — | — | — | — | — | — | — | ☐ |
 
+¹ En las fases 0 y 1 `jarvis/` aún no existe, así que `compileall` se ejecutó sobre los paquetes actuales (`main.py config core audio speech bridge system Indicators Sensors notifications tests`). Se repetirá con `jarvis/` desde la Fase 2.
+
 ### 7.2 Comentarios e incidencias
 
 | Fase | Comentarios | Hash del commit |
 | --- | --- | --- |
-| 0 — Red de seguridad | | |
-| 1 — Limpieza y secretos | | |
+| 0 — Red de seguridad | `compileall` se ejecutó sobre los paquetes actuales (`jarvis/` aún no existe). `test_main_gemini_config.py` se omite con `skip`; además se movió `import main` dentro del test, porque un `skip` no evita el error de importación a nivel de módulo. Los tests nuevos importan los fakes de `test_conversation_model_switch.py` (`from tests...`) y `tests/arduino_stub.py` sustituye el stub de `Arduino` que estaba duplicado en un test. Se corrigió además la doc de §1.4 (sin selección «uno/dos», acuse «Dime», botón D3 «¿Sí?» en espera y locución, aviso de apagado completo). | Pendiente: esperando permiso del propietario |
+| 1 — Limpieza y secretos | Sin desviaciones del plan. `.gitignore`: la regla suelta `/state/rainwater_tank_state.json` se absorbe en `/state/*`. `git rm --cached` no toca el disco: `state/bridge.env`, `state/conversation.jsonl(.bak)` y `.vscode/sftp.json` siguen en local. `ARDUINO/main.cs` movido con 100 % de similitud (sin cambios). Los enlaces `ARDUINO/main.cs` de `CONTEXTO_DEL_PROYECTO.md` ya apuntaban a la ruta nueva. **Hallazgo:** la contraseña SSH del `sftp.json` local es igual que el nombre de usuario (`jarvis`): al rotarla hay que elegir una realmente distinta. Siguen en el historial de Git: token del puente, clave del agente y esa contraseña. | Pendiente: esperando permiso del propietario |
 | 2 — Paquete `jarvis/`: config, dominio y puertos | | |
 | 3 — Infraestructura | | |
 | 4 — Aplicación: hilos, depósito, botones y memoria | | |
