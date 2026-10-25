@@ -14,7 +14,11 @@ from jarvis.domain.knowledge_graph import (
     RelationProposal,
     format_timestamp,
 )
-from jarvis.infrastructure.knowledge.sqlite_store import SCHEMA_VERSION, SqliteKnowledgeGraph
+from jarvis.infrastructure.knowledge.sqlite_store import (
+    SCHEMA_VERSION,
+    SqliteKnowledgeGraph,
+    backup_and_remove,
+)
 
 T1 = "2026-11-01T10:00:00+00:00"
 T2 = "2026-11-02T10:00:00+00:00"
@@ -620,6 +624,44 @@ class ExtractionQueueTest(StoreTestCase):
         self.assertIsNone(self.store.claim_next(self.clock.text(10_000), 300))
         [(status, error)] = self.query("SELECT status, last_error FROM extraction_queue")
         self.assertEqual((status, len(error)), ("failed", 500))
+
+    def test_retry_failed_makes_failed_items_pending_with_their_attempts_reset(self) -> None:
+        self.enqueue("uno")
+        self.enqueue("dos")
+        item = self.store.claim_next(self.clock.text(), 300)
+        self.store.fail(item.id, "sin red", retry_at=None)
+        self.clock.advance(60)
+
+        self.assertEqual(self.store.retry_failed(), 1)
+
+        self.assertEqual(self.store.pending_count(), 2)
+        again = self.store.claim_next(self.clock.text(), 300)
+        self.assertEqual((again.id, again.attempts), (item.id, 1))
+        self.assertEqual(self.store.retry_failed(), 0)
+
+
+class BackupAndRemoveTest(StoreTestCase):
+    def test_copies_the_whole_database_and_removes_it_with_its_wal_files(self) -> None:
+        self.store.apply(GraphDelta(entities=(person("ana", "Ana"),)), T1)
+        graph_id = self.store.snapshot().graph_id
+        backup = self.path.with_name("copia.bak")
+
+        self.assertTrue(backup_and_remove(self.path, backup))
+
+        for suffix in ("", "-wal", "-shm"):
+            self.assertFalse(Path(f"{self.path}{suffix}").exists(), suffix)
+        copy = SqliteKnowledgeGraph(backup, clock=self.clock)
+        self.assertEqual(copy.snapshot().graph_id, graph_id)
+        self.assertIn("ana", [node["key"] for node in copy.snapshot().nodes])
+        fresh = self.open_store()
+        self.assertNotEqual(fresh.snapshot().graph_id, graph_id)
+        self.assertEqual([node["key"] for node in fresh.snapshot().nodes], ["usuario"])
+
+    def test_without_a_database_there_is_nothing_to_do(self) -> None:
+        missing = self.path.with_name("otra.sqlite3")
+
+        self.assertFalse(backup_and_remove(missing, self.path.with_name("x.bak")))
+        self.assertFalse(self.path.with_name("x.bak").exists())
 
 
 if __name__ == "__main__":

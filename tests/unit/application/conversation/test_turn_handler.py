@@ -14,6 +14,7 @@ from tests.fakes import (
     FailingBridge,
     FakeBridge,
     InterruptibleSynthesizer,
+    RecordingKnowledge,
 )
 
 PROCESSING_ERROR = "Lo siento, he tenido un problema al procesar la petición. Puede repetirla."
@@ -97,6 +98,44 @@ class TurnHandlerTest(unittest.TestCase):
             saved = memory.get_context().messages
             self.assertEqual(saved[-2], ChatMessage(Role.USER, "Me llamo Ana"))
             self.assertEqual(saved[-1], ChatMessage(Role.ASSISTANT, "respuesta"))
+
+    def test_the_graph_memory_observes_each_answered_exchange_of_both_models(self) -> None:
+        for model in (AssistantModel.GEMINI, AssistantModel.VENTO):
+            with self.subTest(model=model):
+                knowledge = RecordingKnowledge()
+                harness = ConversationHarness(knowledge=knowledge)
+                harness.select(model)
+
+                harness.turns.handle("Mi hermana se llama Ana", ShortTermHistory(6))
+
+                self.assertEqual(knowledge.observed, [("Mi hermana se llama Ana", "respuesta")])
+
+    def test_a_failed_turn_is_not_observed(self) -> None:
+        knowledge = RecordingKnowledge()
+        harness = ConversationHarness(bridge=FailingBridge(), knowledge=knowledge)
+        harness.select(AssistantModel.GEMINI)
+
+        with self.assertLogs(TURN_LOGGER, level="ERROR"):
+            harness.turns.handle("Hola", ShortTermHistory(6))
+
+        self.assertEqual(knowledge.observed, [])
+
+    def test_an_interrupted_turn_is_not_observed(self) -> None:
+        bridge = BlockingBridge()
+        knowledge = RecordingKnowledge()
+        harness = ConversationHarness(bridge=bridge, knowledge=knowledge)
+        harness.select(AssistantModel.GEMINI)
+        turn = threading.Thread(
+            target=harness.turns.handle, args=("Hola", ShortTermHistory(6)), daemon=True
+        )
+        turn.start()
+        self.assertTrue(bridge.started.wait(timeout=1))
+        harness.gate.request()
+        turn.join(timeout=1)
+
+        bridge.release.set()
+
+        self.assertEqual(knowledge.observed, [])
 
     def test_interrupt_while_waiting_abandons_the_request_and_says_si(self) -> None:
         for model in (AssistantModel.GEMINI, AssistantModel.VENTO):

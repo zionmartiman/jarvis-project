@@ -88,6 +88,17 @@ class TankSettings:
 
 
 @dataclass(frozen=True)
+class KnowledgeGraphSettings:
+    """Graph memory: its database, the Gemini extraction and the retrieval for Gemini."""
+
+    path: Path
+    extraction_enabled: bool = False  # True in Phase 6, after reviewing rebuild_graph
+    retrieval_enabled: bool = False  # True in Phase 6, after reviewing the extraction
+    extraction_model: str | None = None  # None -> GEMINI_MODEL of gemini.env
+    extraction_thinking: dict | None = None  # e.g. {"thinkingBudget": 0} on 2.5 Flash
+
+
+@dataclass(frozen=True)
 class WebSettings:
     host: str = "0.0.0.0"
     port: int = 8765
@@ -104,6 +115,7 @@ class Settings:
     announcements: AnnouncementSettings
     tank: TankSettings
     web: WebSettings
+    knowledge: KnowledgeGraphSettings
 
 
 def load_settings(base_dir: Path | None = None) -> Settings:
@@ -132,4 +144,5 @@ def load_settings(base_dir: Path | None = None) -> Settings:
         ),
         tank=TankSettings(state_path=state_dir / "rainwater_tank_state.json"),
         web=WebSettings(),
+        knowledge=KnowledgeGraphSettings(path=state_dir / "knowledge_graph.sqlite3"),
     )

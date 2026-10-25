@@ -5,13 +5,18 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from jarvis.bootstrap.assistants import build_assistant, build_memory_summarizer
+from jarvis.bootstrap.assistants import (
+    build_assistant,
+    build_graph_extractor,
+    build_memory_summarizer,
+)
 from jarvis.config.credentials import GeminiCredentials
 from jarvis.config.settings import load_settings
 from jarvis.domain.assistant_model import AssistantModel
 from jarvis.domain.conversation import ChatMessage, ConversationContext, Role
 from jarvis.infrastructure.assistants.gemini import GeminiAssistant
 from jarvis.infrastructure.assistants.vento import VentoAssistant
+from jarvis.infrastructure.knowledge.gemini_extractor import GRAPH_DELTA_SCHEMA
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -118,6 +123,80 @@ class BuildMemorySummarizerTest(unittest.TestCase):
         self.assertEqual((history_limit, timeout, system_prompt), (1, 130, ""))
         assistant.ask.assert_called_once_with("prompt", ConversationContext())
         self.assertEqual(reply, "resumen")
+
+
+class BuildGraphExtractorTest(unittest.TestCase):
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        base = Path(directory.name)
+        self.gemini_env = base / "gemini.env"
+        self.gemini_env.write_text("GEMINI_API_KEY=test-key\nGEMINI_MODEL=gemini-chat\n")
+        defaults = load_settings(base)
+        self.settings = replace(
+            defaults, gemini=replace(defaults.gemini, credentials_path=self.gemini_env)
+        )
+
+    def extract(self, settings, reply: str = '{"entities": []}'):
+        assistant = Mock()
+        assistant.ask.return_value = reply
+        with patch("jarvis.bootstrap.assistants.GeminiAssistant", return_value=assistant) as cls:
+            delta = build_graph_extractor(settings).extract("prompt")
+        assistant.ask.assert_called_once_with("prompt", ConversationContext())
+        return cls.call_args, delta
+
+    def test_json_schema_without_system_prompt_and_the_gemini_env_model(self) -> None:
+        call, delta = self.extract(self.settings)
+
+        credentials, history_limit, timeout, system_prompt = call.args
+        self.assertEqual(credentials, GeminiCredentials("test-key", "gemini-chat"))
+        self.assertEqual((history_limit, timeout, system_prompt), (1, 130, ""))
+        self.assertEqual(
+            call.kwargs["generation_config"],
+            {"responseMimeType": "application/json", "responseSchema": GRAPH_DELTA_SCHEMA},
+        )
+        self.assertTrue(delta.is_empty)
+
+    def test_extraction_model_and_thinking_override_the_defaults(self) -> None:
+        settings = replace(
+            self.settings,
+            knowledge=replace(
+                self.settings.knowledge,
+                extraction_model="gemini-extract",
+                extraction_thinking={"thinkingBudget": 0},
+            ),
+        )
+
+        call, _ = self.extract(settings)
+
+        self.assertEqual(call.args[0].model, "gemini-extract")
+        self.assertEqual(call.kwargs["generation_config"]["thinkingConfig"], {"thinkingBudget": 0})
+
+    def test_credentials_are_read_on_each_extraction_not_when_built(self) -> None:
+        self.gemini_env.unlink()
+        extractor = build_graph_extractor(self.settings)
+
+        with self.assertRaisesRegex(RuntimeError, "gemini.env"):
+            extractor.extract("prompt")
+
+    def test_the_real_request_carries_the_schema(self) -> None:
+        sent: list[dict] = []
+
+        def fake_urlopen(request, timeout):
+            sent.append(json.loads(request.data))
+            body = {"candidates": [{"content": {"parts": [{"text": '{"entities": []}'}]}}]}
+            response = Mock()
+            response.__enter__ = lambda self_: response
+            response.__exit__ = lambda self_, *args: False
+            response.read.return_value = json.dumps(body).encode("utf-8")
+            return response
+
+        with patch("urllib.request.urlopen", fake_urlopen):
+            build_graph_extractor(self.settings).extract("prompt")
+
+        self.assertNotIn("systemInstruction", sent[0])
+        self.assertEqual(sent[0]["generationConfig"]["responseMimeType"], "application/json")
+        self.assertEqual(sent[0]["generationConfig"]["temperature"], 0.7)
 
 
 class SystemPromptFileTest(unittest.TestCase):

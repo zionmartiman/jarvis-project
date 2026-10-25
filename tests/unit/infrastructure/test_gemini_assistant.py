@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from jarvis.config.credentials import GeminiCredentials
 from jarvis.domain.conversation import ChatMessage, ConversationContext, Role
-from jarvis.infrastructure.assistants.gemini import GeminiAssistant
+from jarvis.infrastructure.assistants.gemini import GeminiAssistant, GeminiHttpError
 
 CREDENTIALS = GeminiCredentials(api_key="test-key", model="gemini-test")
 
@@ -81,6 +81,47 @@ class BuildRequestPayloadTest(unittest.TestCase):
         self.assertEqual(len(payload["contents"]), 1)
 
 
+class GenerationConfigTest(unittest.TestCase):
+    def test_extra_generation_config_is_merged_with_the_temperature(self) -> None:
+        extra = {"responseMimeType": "application/json", "responseSchema": {"type": "OBJECT"}}
+        gemini = GeminiAssistant(CREDENTIALS, 1, generation_config=extra)
+
+        payload = gemini.build_request_payload("Hola", ConversationContext())
+
+        self.assertEqual(
+            payload["generationConfig"],
+            {
+                "temperature": 0.7,
+                "responseMimeType": "application/json",
+                "responseSchema": {"type": "OBJECT"},
+            },
+        )
+
+    def test_without_generation_config_the_payload_is_unchanged(self) -> None:
+        for config in (None, {}):
+            with self.subTest(config=config):
+                gemini = GeminiAssistant(CREDENTIALS, 11, generation_config=config)
+
+                payload = gemini.build_request_payload("Hola", ConversationContext())
+
+                self.assertEqual(
+                    payload,
+                    {
+                        "contents": [{"role": "user", "parts": [{"text": "Hola"}]}],
+                        "generationConfig": {"temperature": 0.7},
+                    },
+                )
+
+    def test_the_given_config_is_copied(self) -> None:
+        extra = {"responseMimeType": "application/json"}
+        gemini = GeminiAssistant(CREDENTIALS, 1, generation_config=extra)
+        extra["responseMimeType"] = "text/plain"
+
+        payload = gemini.build_request_payload("Hola", ConversationContext())
+
+        self.assertEqual(payload["generationConfig"]["responseMimeType"], "application/json")
+
+
 class AskTest(unittest.TestCase):
     def test_sends_the_request_to_the_configured_model_and_returns_the_reply(self) -> None:
         with patch("urllib.request.urlopen", return_value=reply_response("  Buenas.  ")) as urlopen:
@@ -119,6 +160,17 @@ class AskTest(unittest.TestCase):
                 assistant().ask("Hola", ConversationContext())
 
         self.assertEqual(str(raised.exception), "Gemini no está disponible (500)")
+
+    def test_http_error_keeps_its_status(self) -> None:
+        error = urllib.error.HTTPError("https://example.invalid", 429, "Busy", None, BytesIO(b""))
+
+        with patch("urllib.request.urlopen", side_effect=error):
+            with self.assertRaises(GeminiHttpError) as raised:
+                assistant().ask("Hola", ConversationContext())
+
+        self.assertIsInstance(raised.exception, RuntimeError)
+        self.assertEqual(raised.exception.status, 429)
+        self.assertEqual(str(raised.exception), "Gemini no está disponible (429)")
 
     def test_network_error_is_reported(self) -> None:
         with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("sin red")):

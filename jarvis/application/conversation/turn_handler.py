@@ -10,6 +10,7 @@ from jarvis.application.conversation.assistant_selector import AssistantSelector
 from jarvis.application.conversation.reply_interrupt import ReplyInterruptGate
 from jarvis.application.conversation.transcript import TRANSCRIPT
 from jarvis.application.conversation.voice import Voice
+from jarvis.application.knowledge.graph_memory import KnowledgeGraphMemory
 from jarvis.application.memory.conversation_memory import ConversationMemory
 from jarvis.domain import phrases
 from jarvis.domain.assistant_status import AssistantStatus
@@ -35,6 +36,7 @@ class TurnHandler:
         microphone: AudioInput,
         status: StatusIndicator,
         shutting_down: threading.Event,
+        knowledge: KnowledgeGraphMemory | None = None,
     ) -> None:
         self._selector = selector
         self._memory = memory
@@ -43,6 +45,7 @@ class TurnHandler:
         self._microphone = microphone
         self._status = status
         self._shutting_down = shutting_down
+        self._knowledge = knowledge
 
     def handle(self, command: str, history: ShortTermHistory) -> None:
         try:
@@ -69,6 +72,8 @@ class TurnHandler:
                 history.add_exchange(command, reply)
                 if self._memory is not None:
                     self._memory.record_exchange(command, reply)
+                if self._knowledge is not None:
+                    self._knowledge.observe_exchange(command, reply)
                 was_interrupted = self._speak_reply(reply)
                 if was_interrupted and not self._shutting_down.is_set():
                     self._gate.end()

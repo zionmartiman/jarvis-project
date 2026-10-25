@@ -81,6 +81,10 @@ class KnowledgeGraphStore(ABC):
         """Release the item for a retry at ``retry_at``, or mark it as failed when it is None."""
 
     @abstractmethod
+    def retry_failed(self) -> int:
+        """Make every failed item pending again with its attempts reset; return how many."""
+
+    @abstractmethod
     def pending_count(self) -> int:
         """Number of items still pending (failed ones are not counted)."""
 

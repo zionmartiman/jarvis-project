@@ -17,9 +17,14 @@ from jarvis.application.conversation.reply_interrupt import ReplyInterruptGate
 from jarvis.application.conversation.safe_status import SafeStatusIndicator
 from jarvis.application.conversation.turn_handler import TurnHandler
 from jarvis.application.conversation.voice import Voice
+from jarvis.application.knowledge.graph_memory import KnowledgeGraphMemory
 from jarvis.application.memory.conversation_memory import ConversationMemory
 from jarvis.application.tank_monitor import TankMonitor
-from jarvis.bootstrap.assistants import build_assistant, build_memory_summarizer
+from jarvis.bootstrap.assistants import (
+    build_assistant,
+    build_graph_extractor,
+    build_memory_summarizer,
+)
 from jarvis.bootstrap.logging_setup import configure_logging
 from jarvis.config.credentials import load_azure_credentials
 from jarvis.config.settings import Settings, load_settings
@@ -31,6 +36,7 @@ from jarvis.infrastructure.arduino.distance_sensor import ArduinoDistanceSensor
 from jarvis.infrastructure.arduino.status_light import ArduinoStatusLight
 from jarvis.infrastructure.ipc.alert_light_server import AlertLightControlServer
 from jarvis.infrastructure.ipc.announcer import SocketAnnouncer
+from jarvis.infrastructure.knowledge.sqlite_store import SqliteKnowledgeGraph
 from jarvis.infrastructure.memory.jsonl_backend import JsonlMemoryBackend
 from jarvis.infrastructure.system.power_controller import SudoPowerController
 from jarvis.infrastructure.tank.state_file import JsonTankStateFile
@@ -156,6 +162,7 @@ def build_application(settings: Settings) -> Application:
         compact_after_records=settings.memory.compact_after_messages,
         recent_interactions=settings.memory.recent_exchanges,
     )
+    knowledge = build_knowledge(settings)
     listener = SentenceListener(recognizer, status)
     selector = AssistantSelector(lambda model: build_assistant(model, settings), voice)
     orchestrator = ConversationOrchestrator(
@@ -164,7 +171,14 @@ def build_application(settings: Settings) -> Application:
         listener=listener,
         selector=selector,
         turn_handler=TurnHandler(
-            selector, memory, voice, reply_gate, microphone, status, shutting_down
+            selector,
+            memory,
+            voice,
+            reply_gate,
+            microphone,
+            status,
+            shutting_down,
+            knowledge=knowledge,
         ),
         power_commands=PowerCommandHandler(voice, listener, power_controller),
         microphone=microphone,
@@ -174,7 +188,28 @@ def build_application(settings: Settings) -> Application:
     return Application(
         orchestrator,
         microphone,
-        [alert_light_server, button_monitor, tank_monitor, web_server],
+        [
+            alert_light_server,
+            button_monitor,
+            tank_monitor,
+            *([knowledge] if knowledge is not None else []),
+            web_server,
+        ],
+    )
+
+
+def build_knowledge(settings: Settings) -> KnowledgeGraphMemory | None:
+    """The graph memory is optional: if its database cannot be opened, Jarvis runs without it."""
+    try:
+        store = SqliteKnowledgeGraph(settings.knowledge.path)
+    except Exception:
+        LOGGER.exception("Knowledge graph unavailable; continuing without it.")
+        return None
+    return KnowledgeGraphMemory(
+        store,
+        build_graph_extractor(settings),
+        extraction_enabled=settings.knowledge.extraction_enabled,
+        retrieval_enabled=settings.knowledge.retrieval_enabled,
     )
 
 

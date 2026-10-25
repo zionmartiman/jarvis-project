@@ -108,6 +108,32 @@ python -m jarvis.cli.announce --base64 "$(echo -n 'Prueba de aviso' | base64)"
 
 Los módulos antiguos `notifications.announcement_service` y `notifications.announcement_client` siguen existiendo como shims deprecados hasta que la unidad de la Raspberry y el llamador de alertas de Vento usen los módulos `jarvis.*`.
 
+## Memoria en grafo
+
+La base de datos es `state/knowledge_graph.sqlite3` y se crea al arrancar Jarvis. Mientras `extraction_enabled` siga a `False` (en `jarvis/config/settings.py`), Jarvis no encola nada ni llama a Gemini por su cuenta; estas CLI sirven para poblarla a mano. Se ejecutan desde la carpeta del proyecto con el entorno activado:
+
+```bash
+cd /home/jarvis/jarvis-project
+source .venv/bin/activate
+```
+
+Encolar el último resumen y los intercambios de `state/conversation.jsonl` y procesarlos ya (una llamada a Gemini por elemento):
+
+```bash
+python -m jarvis.cli.rebuild_graph --process
+```
+
+Sin `--process` solo se encolan: Jarvis los procesará cuando la extracción esté activada. Otras opciones:
+
+- `--reset`: guarda una copia en `state/knowledge_graph.sqlite3.<fecha>.bak` y empieza un grafo vacío. Detén antes el servicio para que Jarvis no escriba a la vez.
+- `--retry-failed`: vuelve a poner como pendientes las tareas que fallaron cinco veces, sin volver a encolar el JSONL. Se combina con `--process`.
+
+Fusionar una entidad duplicada en otra (por clave o alias); muestra los eventos que genera:
+
+```bash
+python -m jarvis.cli.merge_entities ana_garcia ana
+```
+
 ## Tests en el PC de desarrollo
 
 ```bash

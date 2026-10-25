@@ -349,6 +349,15 @@ class SqliteKnowledgeGraph(KnowledgeGraphStore):
                     (retry_at, error[:_MAX_ERROR_LENGTH], item_id),
                 )
 
+    def retry_failed(self) -> int:
+        with self._write() as connection:
+            cursor = connection.execute(
+                "UPDATE extraction_queue SET status = 'pending', attempts = 0, "
+                "next_attempt_at = ?, claimed_at = NULL WHERE status = 'failed'",
+                (self._now(),),
+            )
+            return cursor.rowcount
+
     def pending_count(self) -> int:
         with self._read() as connection:
             (count,) = connection.execute(
@@ -665,6 +674,22 @@ class SqliteKnowledgeGraph(KnowledgeGraphStore):
                 )
             )
         return entities
+
+
+def backup_and_remove(path: Path, backup_path: Path) -> bool:
+    """Copy the database with the backup API, then delete it with its -wal and -shm files.
+
+    Returns False when there is no database. Copying the file alone could miss what is still
+    in the WAL; the backup API reads both.
+    """
+    path = Path(path)
+    if not path.exists():
+        return False
+    with closing(sqlite3.connect(path)) as source, closing(sqlite3.connect(backup_path)) as target:
+        source.backup(target)
+    for suffix in ("", "-wal", "-shm"):
+        Path(f"{path}{suffix}").unlink(missing_ok=True)
+    return True
 
 
 def _alias_rows(proposal: EntityProposal) -> list[tuple[str, str]]:
