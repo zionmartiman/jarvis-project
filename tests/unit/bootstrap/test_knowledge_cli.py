@@ -13,6 +13,7 @@ from jarvis.bootstrap.app import build_knowledge
 from jarvis.cli import merge_entities, rebuild_graph
 from jarvis.config.settings import load_settings
 from jarvis.domain.knowledge_graph import EntityProposal, EntityType, GraphDelta
+from jarvis.domain.memory_source import MemorySource
 from jarvis.infrastructure.knowledge.sqlite_store import SqliteKnowledgeGraph
 from jarvis.ports.knowledge_graph import GraphExtractor
 
@@ -179,13 +180,30 @@ class BuildKnowledgeTest(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.settings = load_settings(Path(directory.name))
 
-    def test_builds_the_memory_with_both_switches_off(self) -> None:
-        settings = replace(
+    def with_flows(self, storage: MemorySource, retrieval: MemorySource):
+        return replace(
             self.settings,
-            knowledge=replace(
-                self.settings.knowledge, extraction_enabled=False, retrieval_enabled=False
-            ),
+            memory=replace(self.settings.memory, storage=storage, retrieval=retrieval),
         )
+
+    def remember_that_ana_lives_in_madrid(self) -> None:
+        SqliteKnowledgeGraph(self.settings.knowledge.path).apply(
+            GraphDelta.from_dict(
+                {
+                    "entities": [
+                        {"key": "ana", "name": "Ana", "type": "persona", "aliases": []},
+                        {"key": "madrid", "name": "Madrid", "type": "lugar", "aliases": []},
+                    ],
+                    "relations": [
+                        {"source": "ana", "target": "madrid", "type": "vive_en", "fact": "Ana vive en Madrid"}
+                    ],
+                }
+            ),
+            "2026-10-26T10:00:00+00:00",
+        )
+
+    def test_builds_the_memory_with_the_graph_out_of_both_flows(self) -> None:
+        settings = self.with_flows(MemorySource.CONVERSATION_LOG, MemorySource.CONVERSATION_LOG)
         knowledge = build_knowledge(settings)
 
         self.assertIsInstance(knowledge, KnowledgeGraphMemory)
@@ -194,15 +212,33 @@ class BuildKnowledgeTest(unittest.TestCase):
         self.assertEqual(knowledge.snapshot().version, 1)
         self.assertEqual(SqliteKnowledgeGraph(settings.knowledge.path).pending_count(), 0)
 
-    def test_switches_reach_the_memory(self) -> None:
-        settings = replace(
-            self.settings, knowledge=replace(self.settings.knowledge, extraction_enabled=True)
-        )
-        knowledge = build_knowledge(settings)
+    def test_the_graph_storage_flow_reaches_the_memory(self) -> None:
+        for storage in (MemorySource.GRAPH, MemorySource.BOTH):
+            with self.subTest(storage=storage):
+                settings = self.with_flows(storage, MemorySource.NONE)
+                knowledge = build_knowledge(settings)
 
-        knowledge.observe_exchange("Hola", "Hola")
+                knowledge.observe_exchange("Hola", "Hola")
 
-        self.assertEqual(SqliteKnowledgeGraph(settings.knowledge.path).pending_count(), 1)
+                self.assertGreaterEqual(
+                    SqliteKnowledgeGraph(settings.knowledge.path).pending_count(), 1
+                )
+
+    def test_the_graph_retrieval_flow_reaches_the_memory(self) -> None:
+        self.remember_that_ana_lives_in_madrid()
+        for retrieval, recalls in (
+            (MemorySource.GRAPH, True),
+            (MemorySource.BOTH, True),
+            (MemorySource.CONVERSATION_LOG, False),
+            (MemorySource.NONE, False),
+        ):
+            with self.subTest(retrieval=retrieval):
+                # Saving to the log only, recalling from `retrieval`: the two keys are independent.
+                knowledge = build_knowledge(self.with_flows(MemorySource.CONVERSATION_LOG, retrieval))
+
+                facts = knowledge.context_for("¿dónde vive Ana?")
+
+                self.assertEqual(facts is not None, recalls)
 
     def test_an_unreadable_database_leaves_jarvis_without_graph_memory(self) -> None:
         path = self.settings.knowledge.path

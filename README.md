@@ -71,10 +71,12 @@ python -m jarvis.cli.announce --base64 "$(echo -n 'Prueba de aviso' | base64)"
 
 Jarvis crea al arrancar `state/knowledge_graph.sqlite3` (entidades y relaciones con fechas, más una
 cola de extracción persistente). Gemini extrae los hechos de cada intercambio y, con la
-recuperación activada, recibe los vigentes relacionados con la pregunta. Los dos interruptores
-(`extraction_enabled` y `retrieval_enabled`, en `KnowledgeGraphSettings` de
-`jarvis/config/settings.py`) están a `False` hasta completar el despliegue en la Raspberry; ver
-«Despliegue por fases» en [docs/COMANDOS.md](docs/COMANDOS.md).
+recuperación activada, recibe los vigentes relacionados con la pregunta. Dos llaves de
+`MemorySettings` (`jarvis/config/settings.py`) eligen qué memoria se guarda (`storage`) y de cuál
+se recupera (`retrieval`): `MemorySource.NONE`, `CONVERSATION_LOG` (texto plano en
+`conversation.jsonl`, con resumen), `GRAPH` o `BOTH`. Ver «Llaves maestras de memoria» en
+[docs/CONTEXTO_DEL_PROYECTO.md](docs/CONTEXTO_DEL_PROYECTO.md) y «Despliegue por fases» en
+[docs/COMANDOS.md](docs/COMANDOS.md).
 
 El servidor web (puerto 8765) sirve el inicio (`/`), el panel del depósito (`/deposito`) y el
 grafo en directo (`/memoria`). Las CLI `python -m jarvis.cli.rebuild_graph` y

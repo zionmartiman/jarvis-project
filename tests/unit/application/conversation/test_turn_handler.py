@@ -136,6 +136,46 @@ class TurnHandlerTest(unittest.TestCase):
 
             self.assertIsNone(harness.bridge.contexts[0].knowledge)
 
+    def test_without_log_retrieval_gemini_gets_this_session_and_the_graph_facts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            memory = ConversationMemory(JsonlMemoryBackend(Path(directory) / "c.jsonl"))
+            memory.record_exchange("¿Cómo me llamo?", "Aún no me lo has dicho.")
+            knowledge = RecordingKnowledge(facts="- Ana vive en Madrid.")
+            harness = ConversationHarness(memory=memory, knowledge=knowledge, read_log=False)
+            harness.select(AssistantModel.GEMINI)
+            history = ShortTermHistory(6)
+            history.add_exchange("antes", "respuesta antes")
+
+            harness.turns.handle("Ahora", history)
+
+            context = harness.bridge.contexts[0]
+            self.assertEqual([message.text for message in context.messages], ["antes", "respuesta antes"])
+            self.assertIsNone(context.summary)
+            self.assertEqual(context.knowledge, "- Ana vive en Madrid.")
+
+    def test_without_log_storage_the_exchange_is_not_saved_but_still_recalled(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            memory = ConversationMemory(JsonlMemoryBackend(Path(directory) / "c.jsonl"))
+            memory.record_exchange("¿Cómo me llamo?", "Aún no me lo has dicho.")
+            harness = ConversationHarness(memory=memory, write_log=False)
+            harness.select(AssistantModel.GEMINI)
+
+            harness.turns.handle("Me llamo Ana", ShortTermHistory(6))
+
+            received = harness.bridge.contexts[0].messages
+            self.assertEqual(received[0].text, "¿Cómo me llamo?")
+            saved = [message.text for message in memory.get_context().messages]
+            self.assertEqual(saved, ["¿Cómo me llamo?", "Aún no me lo has dicho."])
+
+    def test_the_log_flows_do_not_touch_the_graph_flow(self) -> None:
+        knowledge = RecordingKnowledge()
+        harness = ConversationHarness(knowledge=knowledge, read_log=False, write_log=False)
+        harness.select(AssistantModel.GEMINI)
+
+        harness.turns.handle("Hola", ShortTermHistory(6))
+
+        self.assertEqual(knowledge.observed, [("Hola", "respuesta")])
+
     def test_a_failed_turn_is_not_observed(self) -> None:
         knowledge = RecordingKnowledge()
         harness = ConversationHarness(bridge=FailingBridge(), knowledge=knowledge)

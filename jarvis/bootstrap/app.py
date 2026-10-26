@@ -157,12 +157,21 @@ def build_application(settings: Settings) -> Application:
         memory_feed=knowledge,
     )
 
-    memory = ConversationMemory(
-        JsonlMemoryBackend(settings.memory.path),
-        summarizer=build_memory_summarizer(settings),
-        max_size_bytes=settings.memory.max_bytes,
-        compact_after_records=settings.memory.compact_after_messages,
-        recent_interactions=settings.memory.recent_exchanges,
+    # The conversation log is only built when it is saved or recalled; without a summarizer it
+    # never compacts (no Gemini call at start-up or after an exchange), so it stays as it is.
+    use_log = settings.memory.storage.includes_log or settings.memory.retrieval.includes_log
+    memory = (
+        ConversationMemory(
+            JsonlMemoryBackend(settings.memory.path),
+            summarizer=(
+                build_memory_summarizer(settings) if settings.memory.storage.includes_log else None
+            ),
+            max_size_bytes=settings.memory.max_bytes,
+            compact_after_records=settings.memory.compact_after_messages,
+            recent_interactions=settings.memory.recent_exchanges,
+        )
+        if use_log
+        else None
     )
     listener =SentenceListener(recognizer, status)
     selector = AssistantSelector(lambda model: build_assistant(model, settings), voice)
@@ -180,6 +189,8 @@ def build_application(settings: Settings) -> Application:
             status,
             shutting_down,
             knowledge=knowledge,
+            read_log=settings.memory.retrieval.includes_log,
+            write_log=settings.memory.storage.includes_log,
         ),
         power_commands=PowerCommandHandler(voice, listener, power_controller),
         microphone=microphone,
@@ -209,8 +220,8 @@ def build_knowledge(settings: Settings) -> KnowledgeGraphMemory | None:
     return KnowledgeGraphMemory(
         store,
         build_graph_extractor(settings),
-        extraction_enabled=settings.knowledge.extraction_enabled,
-        retrieval_enabled=settings.knowledge.retrieval_enabled,
+        extraction_enabled=settings.memory.storage.includes_graph,
+        retrieval_enabled=settings.memory.retrieval.includes_graph,
     )
 
 

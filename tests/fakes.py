@@ -180,6 +180,8 @@ class ConversationHarness:
         wake_error: BaseException | None = None,
         wakes_allowed: int = 1,
         knowledge=None,
+        read_log: bool = True,
+        write_log: bool = True,
     ) -> None:
         self.shutting_down = threading.Event()
         self.microphone = FakeMicrophone()
@@ -203,6 +205,8 @@ class ConversationHarness:
             self.status,
             self.shutting_down,
             knowledge=knowledge,
+            read_log=read_log,
+            write_log=write_log,
         )
         self.power_commands = PowerCommandHandler(self.voice, self.listener, self.power)
         self.orchestrator = ConversationOrchestrator(

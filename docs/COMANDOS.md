@@ -110,7 +110,7 @@ Los módulos antiguos `notifications.announcement_service` y `notifications.anno
 
 ## Memoria en grafo
 
-La base de datos es `state/knowledge_graph.sqlite3` y se crea al arrancar Jarvis. Con `extraction_enabled=True` (en `jarvis/config/settings.py`, como está ahora) Jarvis extrae cada intercambio por su cuenta; estas CLI sirven para importar el historial y para corregir el grafo a mano. Si se pone a `False`, Jarvis no encola nada ni llama a Gemini. Se ejecutan desde la carpeta del proyecto con el entorno activado:
+La base de datos es `state/knowledge_graph.sqlite3` y se crea al arrancar Jarvis. Con `MemorySettings.storage` en `MemorySource.GRAPH` o `BOTH` (en `jarvis/config/settings.py`, como está ahora: `BOTH`) Jarvis extrae cada intercambio por su cuenta; estas CLI sirven para importar el historial y para corregir el grafo a mano. Si `storage` no incluye el grafo, Jarvis no encola nada ni llama a Gemini. `MemorySettings.retrieval` decide de dónde recupera Gemini (`CONVERSATION_LOG`, `GRAPH`, `BOTH` o `NONE`); tras cambiar cualquiera de las dos hay que reiniciar el servicio. Se ejecutan desde la carpeta del proyecto con el entorno activado:
 
 ```bash
 cd /home/jarvis/jarvis-project
@@ -167,12 +167,12 @@ grep "Knowledge extraction took" jarvis-voice.log | tail
 
 ### Despliegue por fases en la Raspberry (Fase 6)
 
-Los dos interruptores están en `KnowledgeGraphSettings` (`jarvis/config/settings.py`) y se activan uno a uno, cada uno con un commit del propietario:
+Las dos llaves (`storage` y `retrieval`, en `MemorySettings` de `jarvis/config/settings.py`) se activan una a una, cada una con un commit del propietario; abajo, «extraction» es `storage` incluyendo el grafo y «retrieval» es `retrieval` incluyendo el grafo:
 
 1. Con ambos a `False`: arrancar el servicio, comprobar que el log no tiene errores y que `/`, `/deposito` y `/memoria` responden.
 2. `python -m jarvis.cli.rebuild_graph --process`; revisar el grafo en `/memoria` y fusionar duplicados con `merge_entities`.
-3. `extraction_enabled=True`. Probar «mi hermana se llama Ana y vive en Valencia» y después «Ana se ha mudado a Madrid»; la relación antigua debe salir discontinua en `/memoria`.
-4. `retrieval_enabled=True`. Preguntar «¿dónde vive mi hermana?» y comprobar los hechos enviados con el logger `jarvis.application.knowledge` a nivel DEBUG (Valencia ya no debe enviarse tras la mudanza).
+3. `storage=MemorySource.BOTH` (o `GRAPH`). Probar «mi hermana se llama Ana y vive en Valencia» y después «Ana se ha mudado a Madrid»; la relación antigua debe salir discontinua en `/memoria`.
+4. `retrieval=MemorySource.BOTH` (o `GRAPH`). Preguntar «¿dónde vive mi hermana?» y comprobar los hechos enviados con el logger `jarvis.application.knowledge` a nivel DEBUG (Valencia ya no debe enviarse tras la mudanza).
 5. Tomar las medidas de arriba y decidir `extraction_thinking` y si se puede omitir el resumen JSONL cuando hay hechos del grafo.
 
 ## Tests en el PC de desarrollo
