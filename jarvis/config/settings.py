@@ -92,8 +92,8 @@ class KnowledgeGraphSettings:
     """Graph memory: its database, the Gemini extraction and the retrieval for Gemini."""
 
     path: Path
-    extraction_enabled: bool = False  # True in Phase 6, after reviewing rebuild_graph
-    retrieval_enabled: bool = False  # True in Phase 6, after reviewing the extraction
+    extraction_enabled: bool = True  # True in Phase 6, after reviewing rebuild_graph
+    retrieval_enabled: bool = True  # True in Phase 6, after reviewing the extraction
     extraction_model: str | None = None  # None -> GEMINI_MODEL of gemini.env
     extraction_thinking: dict | None = None  # e.g. {"thinkingBudget": 0} on 2.5 Flash
 

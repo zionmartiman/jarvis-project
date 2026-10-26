@@ -48,12 +48,12 @@ class LoadSettingsTest(unittest.TestCase):
         self.assertEqual(settings.web.host, "0.0.0.0")
         self.assertEqual(settings.web.port, 8765)
 
-    def test_the_graph_memory_is_switched_off_by_default(self) -> None:
+    def test_the_graph_memory_is_switched_on_by_default(self) -> None:
         knowledge = load_settings(Path("base")).knowledge
 
         self.assertEqual(knowledge.path, Path("base") / "state" / "knowledge_graph.sqlite3")
-        self.assertFalse(knowledge.extraction_enabled)
-        self.assertFalse(knowledge.retrieval_enabled)
+        self.assertTrue(knowledge.extraction_enabled)
+        self.assertTrue(knowledge.retrieval_enabled)
         self.assertIsNone(knowledge.extraction_model)
         self.assertIsNone(knowledge.extraction_thinking)
 

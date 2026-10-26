@@ -110,7 +110,7 @@ Los módulos antiguos `notifications.announcement_service` y `notifications.anno
 
 ## Memoria en grafo
 
-La base de datos es `state/knowledge_graph.sqlite3` y se crea al arrancar Jarvis. Mientras `extraction_enabled` siga a `False` (en `jarvis/config/settings.py`), Jarvis no encola nada ni llama a Gemini por su cuenta; estas CLI sirven para poblarla a mano. Se ejecutan desde la carpeta del proyecto con el entorno activado:
+La base de datos es `state/knowledge_graph.sqlite3` y se crea al arrancar Jarvis. Con `extraction_enabled=True` (en `jarvis/config/settings.py`, como está ahora) Jarvis extrae cada intercambio por su cuenta; estas CLI sirven para importar el historial y para corregir el grafo a mano. Si se pone a `False`, Jarvis no encola nada ni llama a Gemini. Se ejecutan desde la carpeta del proyecto con el entorno activado:
 
 ```bash
 cd /home/jarvis/jarvis-project

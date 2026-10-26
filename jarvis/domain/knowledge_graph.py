@@ -18,6 +18,14 @@ SINGLE_VALUED_RELATION_TYPES = frozenset({"vive_en", "trabaja_en", "se_llama", "
 # Observed relation type -> (canonical type, swap source and target). Grows with what Gemini
 # returns in practice; Phase 0 found ``usuario —tiene_hermana→ ana`` for ``ana —hermana_de→ usuario``.
 RELATION_TYPE_ALIASES: dict[str, tuple[str, bool]] = {"tiene_hermana": ("hermana_de", True)}
+# Kinship type -> how the user names that relative, so «mi hermana» finds «ana». It is added as an
+# alias of the relative when ``<relative> —type→ usuario`` arrives with the relative in the delta.
+KINSHIP_ALIASES: dict[str, tuple[str, ...]] = {
+    "hermana_de": ("mi hermana", "hermana"),
+    "hermano_de": ("mi hermano", "hermano"),
+    "madre_de": ("mi madre", "madre"),
+    "padre_de": ("mi padre", "padre"),
+}
 
 MAX_KEY_LENGTH = 60
 MAX_ENTITIES = 10
@@ -191,9 +199,11 @@ class GraphDelta:
         """Defensive parse of Gemini's JSON: anything that breaks a rule is dropped silently."""
         if not isinstance(value, dict):
             return cls()
+        entities = _parse_items(value.get("entities"), _parse_entity, MAX_ENTITIES)
+        relations = _parse_items(value.get("relations"), _parse_relation, MAX_RELATIONS)
         return cls(
-            entities=_parse_items(value.get("entities"), _parse_entity, MAX_ENTITIES),
-            relations=_parse_items(value.get("relations"), _parse_relation, MAX_RELATIONS),
+            entities=_with_kinship_aliases(entities, relations),
+            relations=relations,
             invalidations=_parse_items(
                 value.get("invalidations"), _parse_invalidation, MAX_INVALIDATIONS
             ),
@@ -231,6 +241,32 @@ def _parse_items(raw: object, parse, limit: int) -> tuple:
         if parsed is not None:
             items.append(parsed)
     return tuple(items)
+
+
+def _with_kinship_aliases(
+    entities: tuple[EntityProposal, ...], relations: tuple[RelationProposal, ...]
+) -> tuple[EntityProposal, ...]:
+    """Give each relative of the user declared in the delta the alias the user would say."""
+    kinship = {
+        relation.source: KINSHIP_ALIASES[relation.type]
+        for relation in relations
+        if relation.target == ROOT_ENTITY_KEY and relation.type in KINSHIP_ALIASES
+    }
+    result = []
+    for proposal in entities:
+        extra = kinship.get(proposal.key)
+        if extra is None:
+            result.append(proposal)
+            continue
+        aliases: list[str] = []
+        seen: set[str] = set()
+        for alias in (*extra, *proposal.aliases):
+            alias_key = normalize_key(alias)
+            if alias_key not in seen:
+                seen.add(alias_key)
+                aliases.append(alias)
+        result.append(replace(proposal, aliases=tuple(aliases[:MAX_ALIASES])))
+    return tuple(result)
 
 
 def _text(value: object, max_length: int) -> str:

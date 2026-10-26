@@ -216,6 +216,52 @@ class GraphDeltaFromDictTest(unittest.TestCase):
         )
 
 
+class KinshipAliasesTest(unittest.TestCase):
+    def test_relative_of_the_user_gets_the_alias_the_user_says(self) -> None:
+        delta = GraphDelta.from_dict(
+            {
+                "entities": [entity("ana", "Ana", "persona")],
+                "relations": [relation("ana", "usuario", "hermana_de", "Ana es la hermana del usuario")],
+            }
+        )
+
+        self.assertEqual(delta.entities[0].aliases, ("mi hermana", "hermana"))
+
+    def test_inverted_form_from_gemini_also_gets_it(self) -> None:
+        delta = GraphDelta.from_dict(
+            {
+                "entities": [entity("ana", "Ana", "persona", ["la peque"])],
+                "relations": [relation("usuario", "ana", "tiene_hermana", "Ana es la hermana del usuario")],
+            }
+        )
+
+        self.assertEqual(delta.entities[0].aliases, ("mi hermana", "hermana", "la peque"))
+
+    def test_existing_alias_is_not_repeated_and_the_limit_holds(self) -> None:
+        delta = GraphDelta.from_dict(
+            {
+                "entities": [entity("ana", "Ana", "persona", ["Mi hermana", "a1", "a2", "a3", "a4"])],
+                "relations": [relation("ana", "usuario", "hermana_de")],
+            }
+        )
+
+        self.assertEqual(delta.entities[0].aliases, ("mi hermana", "hermana", "a1", "a2", "a3"))
+
+    def test_only_relatives_of_the_user_declared_in_the_delta(self) -> None:
+        delta = GraphDelta.from_dict(
+            {
+                "entities": [entity("ana", "Ana"), entity("luis", "Luis")],
+                "relations": [
+                    relation("ana", "luis", "hermana_de"),
+                    relation("luis", "usuario", "amigo_de"),
+                    relation("marta", "usuario", "madre_de"),
+                ],
+            }
+        )
+
+        self.assertEqual([item.aliases for item in delta.entities], [(), ()])
+
+
 class FormatTimestampTest(unittest.TestCase):
     def test_utc_with_whole_seconds(self) -> None:
         moment = datetime(2026, 10, 25, 20, 2, 11, 999999, tzinfo=timezone(timedelta(hours=2)))

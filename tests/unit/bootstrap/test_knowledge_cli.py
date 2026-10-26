@@ -180,13 +180,19 @@ class BuildKnowledgeTest(unittest.TestCase):
         self.settings = load_settings(Path(directory.name))
 
     def test_builds_the_memory_with_both_switches_off(self) -> None:
-        knowledge = build_knowledge(self.settings)
+        settings = replace(
+            self.settings,
+            knowledge=replace(
+                self.settings.knowledge, extraction_enabled=False, retrieval_enabled=False
+            ),
+        )
+        knowledge = build_knowledge(settings)
 
         self.assertIsInstance(knowledge, KnowledgeGraphMemory)
-        self.assertTrue(self.settings.knowledge.path.exists())
+        self.assertTrue(settings.knowledge.path.exists())
         knowledge.observe_exchange("Hola", "Hola")
         self.assertEqual(knowledge.snapshot().version, 1)
-        self.assertEqual(SqliteKnowledgeGraph(self.settings.knowledge.path).pending_count(), 0)
+        self.assertEqual(SqliteKnowledgeGraph(settings.knowledge.path).pending_count(), 0)
 
     def test_switches_reach_the_memory(self) -> None:
         settings = replace(
