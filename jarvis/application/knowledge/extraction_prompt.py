@@ -90,6 +90,22 @@ def clip(text: str) -> str:
     return text.strip()[:MAX_TEXT_CHARS]
 
 
+def split_summary(summary: str) -> list[str]:
+    """One text per topic of a memory summary written as ``Tema: título || texto || Tema: ...``.
+
+    A summary without topics comes back whole; a blank one gives nothing to extract.
+    """
+    sections: list[list[str]] = []
+    for part in (piece.strip() for piece in summary.split("||")):
+        if not part:
+            continue
+        if part.startswith("Tema:") or not sections:
+            sections.append([part])
+        else:
+            sections[-1].append(part)
+    return [" || ".join(parts) for parts in sections]
+
+
 def _known_lines(known: KnownGraph) -> str:
     keys = {entity.id: entity.key for entity in known.entities}
     lines: list[str] = []

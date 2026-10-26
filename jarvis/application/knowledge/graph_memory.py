@@ -9,7 +9,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from jarvis.application.knowledge.extraction_prompt import build_extraction_prompt, clip
+from jarvis.application.knowledge.extraction_prompt import (
+    build_extraction_prompt,
+    clip,
+    split_summary,
+)
 from jarvis.domain.knowledge_graph import (
     ROOT_ENTITY_KEY,
     GraphDelta,
@@ -111,8 +115,12 @@ class KnowledgeGraphMemory(KnowledgeGraphFeed):
             "exchange", user_text, assistant_text, observed_at, self._limits.max_pending
         )
 
-    def enqueue_summary(self, summary: str, observed_at: str) -> None:
-        self._store.enqueue("summary", summary, "", observed_at, self._limits.max_pending)
+    def enqueue_summary(self, summary: str, observed_at: str) -> int:
+        """Queue the summary one topic at a time (a whole one would be clipped); return how many."""
+        sections = split_summary(summary)
+        for section in sections:
+            self._store.enqueue("summary", section, "", observed_at, self._limits.max_pending)
+        return len(sections)
 
     def context_for(self, query: str) -> str | None:
         """Current facts about the entities the query mentions, as text for Gemini; never raises.

@@ -94,6 +94,22 @@ class RebuildGraphTest(KnowledgeCliTestCase):
         self.assertIn("Queued 3 item(s)", output)
         self.assertEqual(self.extractor.prompts, [])
 
+    def test_a_summary_with_many_topics_is_queued_one_topic_at_a_time(self) -> None:
+        topics = {
+            "timestamp": "2026-10-02T09:00:00+00:00",
+            "role": "summary",
+            "content": "Tema: Antena || Dos antenas Wi-Fi. || Tema: Válvula || Válvula de tres vías.",
+        }
+        self.write_jsonl([topics])
+
+        output = self.run_rebuild()
+
+        self.assertEqual(
+            [row[1] for row in self.queue()],
+            ["Tema: Antena || Dos antenas Wi-Fi.", "Tema: Válvula || Válvula de tres vías."],
+        )
+        self.assertIn("Queued 2 item(s)", output)
+
     def test_without_a_jsonl_nothing_is_queued(self) -> None:
         output = self.run_rebuild()
 

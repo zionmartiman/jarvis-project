@@ -4,6 +4,7 @@ from jarvis.application.knowledge.extraction_prompt import (
     MAX_TEXT_CHARS,
     RELATION_TYPES,
     build_extraction_prompt,
+    split_summary,
 )
 from jarvis.domain.knowledge_graph import Entity, EntityType, KnownGraph, Relation
 
@@ -57,6 +58,26 @@ Entidades y relaciones vigentes ya conocidas:
 Intercambio a analizar:
 Usuario: ¿Dónde vive mi hermana?
 Asistente: En Valencia."""
+
+
+class SplitSummaryTest(unittest.TestCase):
+    def test_each_topic_with_its_text_is_one_section(self) -> None:
+        summary = "Tema: Antena || Dos antenas. || Más detalle. || Tema: Válvula || Tres vías."
+
+        self.assertEqual(
+            split_summary(summary),
+            ["Tema: Antena || Dos antenas. || Más detalle.", "Tema: Válvula || Tres vías."],
+        )
+
+    def test_text_before_the_first_topic_is_kept(self) -> None:
+        self.assertEqual(split_summary("Suelto || Tema: A || b"), ["Suelto", "Tema: A || b"])
+
+    def test_a_summary_without_topics_comes_back_whole(self) -> None:
+        self.assertEqual(split_summary("Ana vive en Valencia."), ["Ana vive en Valencia."])
+
+    def test_a_blank_summary_gives_nothing_to_extract(self) -> None:
+        self.assertEqual(split_summary("  ||  "), [])
+        self.assertEqual(split_summary(""), [])
 
 
 class BuildExtractionPromptTest(unittest.TestCase):

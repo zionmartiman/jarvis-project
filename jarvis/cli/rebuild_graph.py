@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import TextIO
 
-from jarvis.application.knowledge.graph_memory import KnowledgeGraphMemory
+from jarvis.application.knowledge.graph_memory import KnowledgeGraphMemory, KnowledgeLimits
 from jarvis.bootstrap.assistants import build_graph_extractor
 from jarvis.bootstrap.logging_setup import configure_logging
 from jarvis.config.settings import load_settings
@@ -45,6 +45,8 @@ def main(argv: Sequence[str] | None = None, output: TextIO | None = None) -> Non
     memory = KnowledgeGraphMemory(
         store,
         build_graph_extractor(settings),
+        # A long summary becomes one queue item per topic: do not let the live limit drop any.
+        KnowledgeLimits(max_pending=100_000),
         extraction_enabled=True,
         retrieval_enabled=False,
     )
@@ -68,8 +70,7 @@ def _queue_jsonl(memory: KnowledgeGraphMemory, entries: list[MemoryEntry]) -> in
     queued = 0
     summaries = [entry for entry in entries if entry.role == "summary"]
     if summaries:
-        memory.enqueue_summary(summaries[-1].content, _observed_at(summaries[-1]))
-        queued += 1
+        queued += memory.enqueue_summary(summaries[-1].content, _observed_at(summaries[-1]))
     messages = [entry for entry in entries if entry.role != "summary"]
     index = 0
     while index + 1 < len(messages):
