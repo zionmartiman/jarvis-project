@@ -43,6 +43,10 @@ class KnowledgeGraphStore(ABC):
         """Current relations touching the entities: both ends first, then one, then newest."""
 
     @abstractmethod
+    def recent_relations(self, limit: int) -> list[Relation]:
+        """The most recently stored current relations, newest first."""
+
+    @abstractmethod
     def entities_by_ids(self, ids: Collection[int]) -> list[Entity]:
         """The entities with these ids, ordered by id."""
 

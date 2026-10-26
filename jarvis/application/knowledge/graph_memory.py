@@ -17,6 +17,7 @@ from jarvis.domain.knowledge_graph import (
     GraphSnapshot,
     KnownGraph,
     format_timestamp,
+    is_recall_question,
     normalize_key,
     query_terms,
 )
@@ -114,16 +115,31 @@ class KnowledgeGraphMemory(KnowledgeGraphFeed):
         self._store.enqueue("summary", summary, "", observed_at, self._limits.max_pending)
 
     def context_for(self, query: str) -> str | None:
-        """Current facts about the entities the query mentions, as text for Gemini; never raises."""
+        """Current facts about the entities the query mentions, as text for Gemini; never raises.
+
+        A question about the conversation itself («¿dónde nos quedamos?») names no entity: it also
+        gets the newest facts, after those of any entity it does mention.
+        """
         if not self._retrieval_enabled:
             return None
         try:
+            limit = self._limits.max_context_facts
             entities = self._store.entities_by_alias_keys(query_terms(query))
-            if not entities:
-                return None
-            relations = self._store.active_relations(
-                [entity.id for entity in entities], self._limits.max_context_facts
+            relations = (
+                self._store.active_relations([entity.id for entity in entities], limit)
+                if entities
+                else []
             )
+            if is_recall_question(query):
+                known = {relation.id for relation in relations}
+                relations += [
+                    relation
+                    for relation in self._store.recent_relations(limit)
+                    if relation.id not in known
+                ]
+                relations = relations[:limit]
+            if not relations:
+                return None
         except Exception:
             LOGGER.exception("Unable to read the knowledge graph for the query.")
             return None

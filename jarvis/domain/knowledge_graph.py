@@ -49,6 +49,18 @@ SPANISH_STOPWORDS = frozenset(
     }
 )
 
+# Already folded. A question containing one of these asks about the conversation itself («¿dónde
+# nos quedamos?»), which names no entity, so the newest facts are recalled instead.
+RECALL_MARKERS = (
+    "nos_quedamos",
+    "habiamos_dejado",
+    "dejamos",
+    "hablamos",
+    "estabamos",
+    "ultima_vez",
+    "recuerdas",
+)
+
 _NON_ALPHANUMERIC = re.compile(r"[^a-z0-9]+")
 
 
@@ -72,6 +84,12 @@ def _fold(text: str) -> str:
 def normalize_key(text: str) -> str:
     """NFKD without diacritics, lower case; runs of anything but [a-z0-9] become one '_'."""
     return _fold(text)[:MAX_KEY_LENGTH].rstrip("_")
+
+
+def is_recall_question(text: str) -> bool:
+    """Whether the text asks about the previous conversation rather than about a named entity."""
+    folded = f"_{_fold(text)}_"
+    return any(f"_{marker}_" in folded for marker in RECALL_MARKERS)
 
 
 def query_terms(text: str, max_ngram: int = 3) -> list[str]:

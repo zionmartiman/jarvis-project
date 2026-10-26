@@ -367,6 +367,27 @@ class ApplyRelationsTest(StoreTestCase):
         self.assertEqual([relation.fact for relation in limited], ["tres"])
         self.assertEqual(self.store.active_relations([], 10), [])
 
+    def test_recent_relations_are_the_newest_current_ones(self) -> None:
+        self.store.apply(
+            GraphDelta(relations=(RelationProposal("ana", "valencia", "le_gusta", "uno"),)), T1
+        )
+        self.store.apply(
+            GraphDelta(relations=(RelationProposal("valencia", "madrid", "cerca_de", "dos"),)), T2
+        )
+        self.store.apply(
+            GraphDelta(relations=(RelationProposal("ana", "madrid", "le_gusta", "tres"),)), T3
+        )
+        self.store.apply(
+            GraphDelta(
+                invalidations=(InvalidationProposal("valencia", "madrid", "cerca_de", "ya no"),)
+            ),
+            T3,
+        )
+
+        self.assertEqual([r.fact for r in self.store.recent_relations(10)], ["tres", "uno"])
+        self.assertEqual([r.fact for r in self.store.recent_relations(1)], ["tres"])
+        self.assertEqual(self.store.recent_relations(0), [])
+
     def test_a_failure_halfway_leaves_nothing_written(self) -> None:
         before = self.store.snapshot()
         original = self.store._record

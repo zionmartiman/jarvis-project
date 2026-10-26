@@ -174,6 +174,17 @@ class SqliteKnowledgeGraph(KnowledgeGraphStore):
             ).fetchall()
         return [_relation_from_row(row) for row in rows]
 
+    def recent_relations(self, limit: int) -> list[Relation]:
+        if limit <= 0:
+            return []
+        with self._read() as connection:
+            rows = connection.execute(
+                f"SELECT {_RELATION_COLUMNS} FROM relations WHERE valid_to IS NULL "
+                "ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [_relation_from_row(row) for row in rows]
+
     def entities_by_ids(self, ids: Collection[int]) -> list[Entity]:
         with self._read() as connection:
             return self._load_entities(connection, list(dict.fromkeys(ids)))

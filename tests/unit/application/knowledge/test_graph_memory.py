@@ -286,6 +286,40 @@ class ContextForTest(GraphMemoryTestCase):
     def test_a_query_that_mentions_nobody_returns_none(self) -> None:
         self.assertIsNone(self.retrieval().context_for("¿Qué hora es?"))
 
+    def remember_the_antenna(self) -> None:
+        self.apply(
+            GraphDelta(
+                entities=(EntityProposal("antena_wifi", "Antena Wi-Fi", EntityType.CONCEPTO),),
+                relations=(
+                    RelationProposal(
+                        "usuario", "antena_wifi", "considera_usar", "El usuario valora una segunda antena"
+                    ),
+                ),
+            )
+        )
+
+    def test_a_question_about_the_conversation_gets_the_newest_facts(self) -> None:
+        self.remember_the_antenna()
+
+        context = self.retrieval().context_for("¿Dónde nos quedamos?")
+
+        self.assertEqual(
+            context.splitlines()[0], "- El usuario valora una segunda antena. (desde 2026-10-25)"
+        )
+
+    def test_a_recall_question_keeps_the_facts_of_the_entities_it_names_first(self) -> None:
+        self.remember_the_antenna()
+
+        lines = self.retrieval().context_for("¿De qué hablamos con Ana?").splitlines()
+
+        self.assertIn("Ana es hermana del usuario", lines[0])
+        self.assertIn("El usuario valora una segunda antena", lines[-1])
+
+    def test_without_a_recall_question_the_newest_facts_are_not_added(self) -> None:
+        self.remember_the_antenna()
+
+        self.assertIsNone(self.retrieval().context_for("¿Qué hora es?"))
+
     def test_accents_are_ignored_in_both_directions(self) -> None:
         self.apply(
             GraphDelta(relations=(RelationProposal("ana", "malaga", "visita", "Ana visita Málaga"),))

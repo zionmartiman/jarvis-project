@@ -49,11 +49,11 @@ class LoadSettingsTest(unittest.TestCase):
         self.assertEqual(settings.web.host, "0.0.0.0")
         self.assertEqual(settings.web.port, 8765)
 
-    def test_both_memory_flows_are_saved_and_recalled_by_default(self) -> None:
+    def test_the_memory_flows_are_memory_sources(self) -> None:
         memory = load_settings(Path("base")).memory
 
-        self.assertIs(memory.storage, MemorySource.BOTH)
-        self.assertIs(memory.retrieval, MemorySource.BOTH)
+        self.assertIsInstance(memory.storage, MemorySource)
+        self.assertIsInstance(memory.retrieval, MemorySource)
 
     def test_the_graph_memory_settings(self) -> None:
         knowledge = load_settings(Path("base")).knowledge

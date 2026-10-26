@@ -19,6 +19,8 @@ RELATION_TYPES = (
     "amigo_de",
     "tiene",
     "usa",
+    "considera_usar",
+    "trata_de",
     "le_gusta",
     "no_le_gusta",
     "trabaja_en_proyecto",
@@ -32,9 +34,20 @@ _INSTRUCTIONS = (
     "de conocimiento sobre el usuario y su entorno, en el JSON pedido.\n"
     "\n"
     "Reglas:\n"
-    "- Extrae solo hechos estables y explícitos: personas, lugares, proyectos, dispositivos, preferencias,\n"
-    "  tareas y eventos del usuario. Ignora saludos, preguntas, charla y lo que diga el asistente\n"
-    "  si el usuario no lo confirma.\n"
+    "- Extrae los hechos estables y explícitos: personas, lugares, proyectos, dispositivos, preferencias,\n"
+    "  tareas y eventos del usuario. Extrae también sus ideas en curso (dispositivos, proyectos o\n"
+    "  soluciones que está diseñando o valorando), aunque no estén decididas.\n"
+    "- Una idea en curso no es un hecho estable: usa \"considera_usar\" (nunca \"usa\") y escribe el\n"
+    "  \"fact\" como estado, por ejemplo «El usuario valora usar un ESP32 para conectar los sensores».\n"
+    "- Por cada tema importante de la conversación crea UNA entidad de type \"concepto\" que lo nombre\n"
+    "  (por ejemplo «Conectividad Wi-Fi del ESP32») y enlázala con \"trata_de\" a los dispositivos,\n"
+    "  proyectos o lugares de los que trata (tema —trata_de→ elemento). Reutiliza el tema si ya existe.\n"
+    "- En \"aliases\" de cada entidad nueva pon hasta 5 formas con las que el usuario la nombraría\n"
+    "  después (apodos, abreviaturas, sinónimos o cómo la diría en una frase corta), sobre todo en los\n"
+    "  temas: «la antena», «el wifi doble».\n"
+    "- Lo que proponga el asistente solo cuenta si el usuario lo acepta o lo adopta.\n"
+    "- Ignora saludos, preguntas, charla y frases que no se entiendan.\n"
+    "- Si el usuario descarta o cambia una idea, añade su relación a \"invalidations\" con el motivo.\n"
     '- El usuario es siempre la key "usuario". Si dice su nombre, añádelo como alias de "usuario";\n'
     "  no crees otra persona.\n"
     "- Reutiliza la key de las entidades conocidas cuando se refieran a lo mismo (también por alias,\n"

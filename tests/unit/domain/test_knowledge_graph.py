@@ -9,6 +9,7 @@ from jarvis.domain.knowledge_graph import (
     InvalidationProposal,
     RelationProposal,
     format_timestamp,
+    is_recall_question,
     normalize_key,
     query_terms,
 )
@@ -214,6 +215,27 @@ class GraphDeltaFromDictTest(unittest.TestCase):
         self.assertEqual(
             delta.invalidations, (InvalidationProposal("ana", "usuario", "hermana_de", "r"),)
         )
+
+
+class IsRecallQuestionTest(unittest.TestCase):
+    def test_questions_about_the_conversation(self) -> None:
+        for text in (
+            "¿Dónde nos quedamos?",
+            "donde no habíamos dejado",
+            "¿De qué hablamos ayer?",
+            "¿Qué estábamos diseñando?",
+            "¿Recuerdas la última vez?",
+        ):
+            with self.subTest(text=text):
+                self.assertTrue(is_recall_question(text))
+
+    def test_questions_about_anything_else(self) -> None:
+        for text in ("¿Dónde vive mi hermana?", "¿Qué hora es?", "Háblame del ESP32", ""):
+            with self.subTest(text=text):
+                self.assertFalse(is_recall_question(text))
+
+    def test_a_marker_only_counts_as_a_whole_word(self) -> None:
+        self.assertFalse(is_recall_question("Ya lo dejamosa un lado"))
 
 
 class KinshipAliasesTest(unittest.TestCase):
