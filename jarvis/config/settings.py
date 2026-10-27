@@ -39,7 +39,7 @@ class MemorySettings:
     # Master switches. CONVERSATION_LOG = state/conversation.jsonl (recent exchanges + summary),
     # GRAPH = state/knowledge_graph.sqlite3, BOTH, or NONE. They are independent: Jarvis can keep
     # saving to one flow while recalling from the other.
-    storage: MemorySource = MemorySource.GRAPH  # where each answered exchange is saved
+    storage: MemorySource = MemorySource.BOTH  # where each answered exchange is saved
     retrieval: MemorySource = MemorySource.GRAPH  # where Gemini's long-term context is read from
     max_bytes: int = 4096
     compact_after_messages: int = 10
