@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 import threading
+from dataclasses import replace
 from queue import Empty, Queue
 
 from jarvis.application.conversation.assistant_selector import AssistantSelector
 from jarvis.application.conversation.reply_interrupt import ReplyInterruptGate
 from jarvis.application.conversation.transcript import TRANSCRIPT
 from jarvis.application.conversation.voice import Voice
+from jarvis.application.knowledge.graph_memory import KnowledgeGraphMemory
 from jarvis.application.memory.conversation_memory import ConversationMemory
 from jarvis.domain import phrases
 from jarvis.domain.assistant_status import AssistantStatus
@@ -35,14 +37,20 @@ class TurnHandler:
         microphone: AudioInput,
         status: StatusIndicator,
         shutting_down: threading.Event,
+        knowledge: KnowledgeGraphMemory | None = None,
+        read_log: bool = True,
+        write_log: bool = True,
     ) -> None:
         self._selector = selector
         self._memory = memory
+        self._read_log = read_log
+        self._write_log = write_log
         self._voice = voice
         self._gate = gate
         self._microphone = microphone
         self._status = status
         self._shutting_down = shutting_down
+        self._knowledge = knowledge
 
     def handle(self, command: str, history: ShortTermHistory) -> None:
         try:
@@ -53,8 +61,8 @@ class TurnHandler:
                 raise RuntimeError("No AI assistant is selected")
             self._gate.begin()
             try:
-                if model.uses_long_term_memory and self._memory is not None:
-                    context = self._memory.get_context()
+                if model.uses_long_term_memory:
+                    context = self._long_term_context(command, history)
                 else:
                     context = history.as_context()
                 reply = self._ask_interruptibly(bridge, command, context)
@@ -67,8 +75,10 @@ class TurnHandler:
                     return
                 TRANSCRIPT.info("%s: %s", model.display_name, reply)
                 history.add_exchange(command, reply)
-                if self._memory is not None:
+                if self._memory is not None and self._write_log:
                     self._memory.record_exchange(command, reply)
+                if self._knowledge is not None:
+                    self._knowledge.observe_exchange(command, reply)
                 was_interrupted = self._speak_reply(reply)
                 if was_interrupted and not self._shutting_down.is_set():
                     self._gate.end()
@@ -80,6 +90,16 @@ class TurnHandler:
             LOGGER.exception("Unable to process the message.")
             self._voice.say(phrases.PROCESSING_ERROR)
             self._microphone.clear()
+
+    def _long_term_context(self, command: str, history: ShortTermHistory) -> ConversationContext:
+        """What Gemini recalls: the conversation log (or just this session) plus the graph facts."""
+        if self._memory is not None and self._read_log:
+            context = self._memory.get_context()
+        else:
+            context = history.as_context()
+        if self._knowledge is not None:
+            context = replace(context, knowledge=self._knowledge.context_for(command))
+        return context
 
     def _acknowledge_interrupt(self) -> None:
         self._gate.end()

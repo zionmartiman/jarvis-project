@@ -14,6 +14,7 @@ from tests.fakes import (
     FailingBridge,
     FakeBridge,
     InterruptibleSynthesizer,
+    RecordingKnowledge,
 )
 
 PROCESSING_ERROR = "Lo siento, he tenido un problema al procesar la petición. Puede repetirla."
@@ -97,6 +98,110 @@ class TurnHandlerTest(unittest.TestCase):
             saved = memory.get_context().messages
             self.assertEqual(saved[-2], ChatMessage(Role.USER, "Me llamo Ana"))
             self.assertEqual(saved[-1], ChatMessage(Role.ASSISTANT, "respuesta"))
+
+    def test_the_graph_memory_observes_each_answered_exchange_of_both_models(self) -> None:
+        for model in (AssistantModel.GEMINI, AssistantModel.VENTO):
+            with self.subTest(model=model):
+                knowledge = RecordingKnowledge()
+                harness = ConversationHarness(knowledge=knowledge)
+                harness.select(model)
+
+                harness.turns.handle("Mi hermana se llama Ana", ShortTermHistory(6))
+
+                self.assertEqual(knowledge.observed, [("Mi hermana se llama Ana", "respuesta")])
+
+    def test_gemini_receives_the_graph_facts_and_vento_does_not(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            memory = ConversationMemory(JsonlMemoryBackend(Path(directory) / "c.jsonl"))
+            for model, expected in ((AssistantModel.GEMINI, "- Ana vive en Valencia."), (AssistantModel.VENTO, None)):
+                with self.subTest(model=model):
+                    knowledge = RecordingKnowledge(facts="- Ana vive en Valencia.")
+                    harness = ConversationHarness(memory=memory, knowledge=knowledge)
+                    harness.select(model)
+
+                    harness.turns.handle("¿Dónde vive mi hermana?", ShortTermHistory(6))
+
+                    self.assertEqual(harness.bridge.contexts[0].knowledge, expected)
+                    self.assertEqual(
+                        knowledge.queries, ["¿Dónde vive mi hermana?"] if expected else []
+                    )
+
+    def test_gemini_without_graph_memory_gets_no_knowledge(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            memory = ConversationMemory(JsonlMemoryBackend(Path(directory) / "c.jsonl"))
+            harness = ConversationHarness(memory=memory)
+            harness.select(AssistantModel.GEMINI)
+
+            harness.turns.handle("Hola", ShortTermHistory(6))
+
+            self.assertIsNone(harness.bridge.contexts[0].knowledge)
+
+    def test_without_log_retrieval_gemini_gets_this_session_and_the_graph_facts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            memory = ConversationMemory(JsonlMemoryBackend(Path(directory) / "c.jsonl"))
+            memory.record_exchange("¿Cómo me llamo?", "Aún no me lo has dicho.")
+            knowledge = RecordingKnowledge(facts="- Ana vive en Madrid.")
+            harness = ConversationHarness(memory=memory, knowledge=knowledge, read_log=False)
+            harness.select(AssistantModel.GEMINI)
+            history = ShortTermHistory(6)
+            history.add_exchange("antes", "respuesta antes")
+
+            harness.turns.handle("Ahora", history)
+
+            context = harness.bridge.contexts[0]
+            self.assertEqual([message.text for message in context.messages], ["antes", "respuesta antes"])
+            self.assertIsNone(context.summary)
+            self.assertEqual(context.knowledge, "- Ana vive en Madrid.")
+
+    def test_without_log_storage_the_exchange_is_not_saved_but_still_recalled(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            memory = ConversationMemory(JsonlMemoryBackend(Path(directory) / "c.jsonl"))
+            memory.record_exchange("¿Cómo me llamo?", "Aún no me lo has dicho.")
+            harness = ConversationHarness(memory=memory, write_log=False)
+            harness.select(AssistantModel.GEMINI)
+
+            harness.turns.handle("Me llamo Ana", ShortTermHistory(6))
+
+            received = harness.bridge.contexts[0].messages
+            self.assertEqual(received[0].text, "¿Cómo me llamo?")
+            saved = [message.text for message in memory.get_context().messages]
+            self.assertEqual(saved, ["¿Cómo me llamo?", "Aún no me lo has dicho."])
+
+    def test_the_log_flows_do_not_touch_the_graph_flow(self) -> None:
+        knowledge = RecordingKnowledge()
+        harness = ConversationHarness(knowledge=knowledge, read_log=False, write_log=False)
+        harness.select(AssistantModel.GEMINI)
+
+        harness.turns.handle("Hola", ShortTermHistory(6))
+
+        self.assertEqual(knowledge.observed, [("Hola", "respuesta")])
+
+    def test_a_failed_turn_is_not_observed(self) -> None:
+        knowledge = RecordingKnowledge()
+        harness = ConversationHarness(bridge=FailingBridge(), knowledge=knowledge)
+        harness.select(AssistantModel.GEMINI)
+
+        with self.assertLogs(TURN_LOGGER, level="ERROR"):
+            harness.turns.handle("Hola", ShortTermHistory(6))
+
+        self.assertEqual(knowledge.observed, [])
+
+    def test_an_interrupted_turn_is_not_observed(self) -> None:
+        bridge = BlockingBridge()
+        knowledge = RecordingKnowledge()
+        harness = ConversationHarness(bridge=bridge, knowledge=knowledge)
+        harness.select(AssistantModel.GEMINI)
+        turn = threading.Thread(
+            target=harness.turns.handle, args=("Hola", ShortTermHistory(6)), daemon=True
+        )
+        turn.start()
+        self.assertTrue(bridge.started.wait(timeout=1))
+        harness.gate.request()
+        turn.join(timeout=1)
+
+        bridge.release.set()
+
+        self.assertEqual(knowledge.observed, [])
 
     def test_interrupt_while_waiting_abandons_the_request_and_says_si(self) -> None:
         for model in (AssistantModel.GEMINI, AssistantModel.VENTO):

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from jarvis.domain.memory_source import MemorySource
 from jarvis.infrastructure.runtime import runtime_dir
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -32,9 +33,14 @@ class ConversationSettings:
 
 @dataclass(frozen=True)
 class MemorySettings:
-    """Durable conversation memory and its compaction thresholds."""
+    """Which durable memory is saved and recalled, plus the conversation log and its compaction."""
 
     path: Path
+    # Master switches. CONVERSATION_LOG = state/conversation.jsonl (recent exchanges + summary),
+    # GRAPH = state/knowledge_graph.sqlite3, BOTH, or NONE. They are independent: Jarvis can keep
+    # saving to one flow while recalling from the other.
+    storage: MemorySource = MemorySource.BOTH  # where each answered exchange is saved
+    retrieval: MemorySource = MemorySource.GRAPH  # where Gemini's long-term context is read from
     max_bytes: int = 4096
     compact_after_messages: int = 10
     recent_exchanges: int = 5
@@ -88,6 +94,15 @@ class TankSettings:
 
 
 @dataclass(frozen=True)
+class KnowledgeGraphSettings:
+    """Graph memory: its database and the Gemini extraction (on/off lives in MemorySettings)."""
+
+    path: Path
+    extraction_model: str | None = None  # None -> GEMINI_MODEL of gemini.env
+    extraction_thinking: dict | None = None  # e.g. {"thinkingBudget": 0} on 2.5 Flash
+
+
+@dataclass(frozen=True)
 class WebSettings:
     host: str = "0.0.0.0"
     port: int = 8765
@@ -104,6 +119,7 @@ class Settings:
     announcements: AnnouncementSettings
     tank: TankSettings
     web: WebSettings
+    knowledge: KnowledgeGraphSettings
 
 
 def load_settings(base_dir: Path | None = None) -> Settings:
@@ -132,4 +148,5 @@ def load_settings(base_dir: Path | None = None) -> Settings:
         ),
         tank=TankSettings(state_path=state_dir / "rainwater_tank_state.json"),
         web=WebSettings(),
+        knowledge=KnowledgeGraphSettings(path=state_dir / "knowledge_graph.sqlite3"),
     )

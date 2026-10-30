@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Memoria — Jarvis</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/site/site.css">
+  <script src="/static/site/nav.js" defer></script>
+  <script src="/static/vendor/force-graph-1.52.0.min.js" defer></script>
+  <script src="/static/memoria/graph_state.js" defer></script>
+  <script src="/static/memoria/memoria.js" defer></script>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--site-bg);
+      color: var(--site-text);
+      font-family: "Inter", -apple-system, sans-serif;
+    }
+
+    .memory {
+      position: relative;
+      height: calc(100vh - var(--site-header-height));
+      height: calc(100dvh - var(--site-header-height));
+      overflow: hidden;
+    }
+
+    .memory-graph {
+      position: absolute;
+      inset: 0;
+    }
+
+    .memory-panel,
+    .history-bar {
+      position: absolute;
+      background: var(--site-surface);
+      border: 1px solid var(--site-border);
+      border-radius: 12px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      font-size: 0.9rem;
+    }
+
+    .memory-panel {
+      top: 16px;
+      left: 16px;
+      width: min(300px, calc(100% - 32px));
+      max-height: calc(100% - 32px);
+      overflow-y: auto;
+      padding: 0.75rem 0.9rem;
+    }
+
+    .memory-panel summary {
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 0.25rem 0.75rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .status { font-weight: 600; }
+    .status-live { color: #3ddc97; }
+    .status-reconnecting,
+    .status-offline { color: #ffb454; }
+    .status-history { color: var(--site-accent); }
+    .counts { color: var(--site-text-muted); }
+
+    .field { margin-top: 0.8rem; }
+
+    .field label,
+    .field legend {
+      display: block;
+      margin-bottom: 0.3rem;
+      color: var(--site-text-muted);
+      font-size: 0.8rem;
+    }
+
+    fieldset.field {
+      border: 0;
+      padding: 0;
+      min-width: 0;
+    }
+
+    input[type="search"] {
+      width: 100%;
+      padding: 0.45rem 0.6rem;
+      border-radius: 8px;
+      border: 1px solid var(--site-border);
+      background: transparent;
+      color: var(--site-text);
+      font: inherit;
+    }
+
+    .search-result {
+      min-height: 1.2em;
+      margin-top: 0.25rem;
+      color: var(--site-text-muted);
+      font-size: 0.8rem;
+    }
+
+    .type-filter,
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.2rem 0;
+      color: var(--site-text);
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .swatch {
+      width: 0.8rem;
+      height: 0.8rem;
+      border-radius: 50%;
+    }
+
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.8rem;
+    }
+
+    .memory button {
+      padding: 0.4rem 0.8rem;
+      border-radius: 8px;
+      border: 1px solid var(--site-border);
+      background: transparent;
+      color: var(--site-text);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .memory button:hover:not(:disabled),
+    .memory button:focus-visible {
+      border-color: var(--site-accent);
+      color: var(--site-accent);
+    }
+
+    .memory button:disabled {
+      opacity: 0.5;
+      cursor: progress;
+    }
+
+    .detail {
+      margin-top: 0.9rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--site-border);
+    }
+
+    .detail h2 {
+      margin: 0 0 0.25rem;
+      font-size: 1rem;
+    }
+
+    .detail-meta {
+      margin: 0 0 0.25rem;
+      color: var(--site-text-muted);
+      font-size: 0.8rem;
+    }
+
+    .detail ul {
+      margin: 0.4rem 0 0;
+      padding-left: 1.1rem;
+    }
+
+    .detail li.expired {
+      color: var(--site-text-muted);
+      text-decoration: line-through;
+    }
+
+    .empty {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(360px, calc(100% - 32px));
+      text-align: center;
+      color: var(--site-text-muted);
+      line-height: 1.5;
+      pointer-events: none;
+    }
+
+    .history-bar {
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 0.75rem;
+      padding: 0.6rem 0.9rem;
+    }
+
+    .history-bar[hidden],
+    .empty[hidden],
+    .detail[hidden] {
+      display: none;
+    }
+
+    .history-bar input[type="range"] {
+      flex: 1 1 200px;
+      min-width: 0;
+    }
+
+    .timeline-label {
+      color: var(--site-text-muted);
+      font-size: 0.8rem;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main class="memory">
+    <div id="graph" class="memory-graph" role="img" aria-label="Grafo de la memoria de Jarvis: entidades y relaciones"></div>
+
+    <p id="empty" class="empty" hidden>
+      Todavía no hay recuerdos. Aparecerán aquí en cuanto Jarvis aprenda algo de las conversaciones.
+    </p>
+
+    <details id="controls" class="memory-panel" open>
+      <summary>Controles</summary>
+
+      <div class="status-row">
+        <span id="status" class="status status-reconnecting" role="status">Conectando…</span>
+        <span id="counts" class="counts"></span>
+      </div>
+
+      <div class="field">
+        <label for="search">Buscar por nombre o alias</label>
+        <input id="search" type="search" autocomplete="off" placeholder="Ana, Valencia…">
+        <div id="search-result" class="search-result" role="status"></div>
+      </div>
+
+      <fieldset class="field">
+        <legend>Tipos</legend>
+        <div id="types"></div>
+      </fieldset>
+
+      <label class="check">
+        <input id="show-expired" type="checkbox">
+        <span>Mostrar caducadas</span>
+      </label>
+
+      <div class="buttons">
+        <button id="fit" type="button">Encuadrar</button>
+        <button id="history-toggle" type="button">Historia</button>
+      </div>
+
+      <div id="detail" class="detail" hidden></div>
+    </details>
+
+    <div id="history-bar" class="history-bar" hidden>
+      <button id="play" type="button" aria-label="Reproducir">▶</button>
+      <input id="timeline" type="range" min="0" max="0" value="0" step="1" aria-label="Momento de la historia">
+      <span id="timeline-label" class="timeline-label"></span>
+      <button id="back-to-live" type="button">Volver a directo</button>
+    </div>
+  </main>
+</body>
+</html>

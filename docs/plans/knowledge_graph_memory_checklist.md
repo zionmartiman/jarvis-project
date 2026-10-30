@@ -28,7 +28,8 @@ Cambiar de modelo: `/model` en Claude Code. El esfuerzo se ajusta con el selecto
 3. Pedir: «implementa la Fase N de `knowledge_graph_memory_technical_plan.md`».
 4. Tests en verde: `python -m unittest discover -s tests -t .`
 5. Documentación actualizada (`CLAUDE.md`).
-6. Confirmar y hacer commit.
+6. Fila de la fase actualizada en la tabla «Seguimiento de la implementación» (§12 del plan técnico): qué se hizo, qué queda pendiente (también lo arrastrado de la fase anterior) y qué deben tener en cuenta las fases siguientes.
+7. Confirmar y hacer commit.
 
 ## Comprobaciones previas
 
@@ -125,4 +126,5 @@ No requiere acción. Se descarga en la Fase 4 y se verifica el SHA-256 anotado e
 - [ ] Tests en verde.
 - [ ] `python -m compileall -q jarvis main.py` sin errores.
 - [ ] `CLAUDE.md` cumplido: `CONTEXTO_DEL_PROYECTO.md` actualizado.
+- [ ] Tabla de seguimiento (§12 del plan técnico) actualizada.
 - [ ] Confirmado por el propietario antes del commit.

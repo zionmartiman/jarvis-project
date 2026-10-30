@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from jarvis.config.settings import load_settings
+from jarvis.domain.memory_source import MemorySource
 from jarvis.infrastructure.runtime import runtime_dir
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -47,6 +48,19 @@ class LoadSettingsTest(unittest.TestCase):
         self.assertEqual(settings.tank.min_alert_interval_seconds, 5.0)
         self.assertEqual(settings.web.host, "0.0.0.0")
         self.assertEqual(settings.web.port, 8765)
+
+    def test_the_memory_flows_are_memory_sources(self) -> None:
+        memory = load_settings(Path("base")).memory
+
+        self.assertIsInstance(memory.storage, MemorySource)
+        self.assertIsInstance(memory.retrieval, MemorySource)
+
+    def test_the_graph_memory_settings(self) -> None:
+        knowledge = load_settings(Path("base")).knowledge
+
+        self.assertEqual(knowledge.path, Path("base") / "state" / "knowledge_graph.sqlite3")
+        self.assertIsNone(knowledge.extraction_model)
+        self.assertIsNone(knowledge.extraction_thinking)
 
     def test_project_paths_are_relative_to_the_base_directory(self) -> None:
         base = Path("base")

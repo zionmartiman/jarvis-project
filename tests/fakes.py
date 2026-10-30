@@ -129,6 +129,22 @@ class BlockingBridge(AssistantBridge):
         return "respuesta tardía"
 
 
+class RecordingKnowledge:
+    """Stands in for KnowledgeGraphMemory in the turn tests: records what it observes and is asked."""
+
+    def __init__(self, facts: str | None = None) -> None:
+        self.observed: list[tuple[str, str]] = []
+        self.queries: list[str] = []
+        self.facts = facts
+
+    def context_for(self, query: str) -> str | None:
+        self.queries.append(query)
+        return self.facts
+
+    def observe_exchange(self, user_text: str, assistant_text: str) -> None:
+        self.observed.append((user_text, assistant_text))
+
+
 class RecordingStatusIndicator(StatusIndicator):
     def __init__(self) -> None:
         self.statuses: list[AssistantStatus] = []
@@ -163,6 +179,9 @@ class ConversationHarness:
         history_size: int = 6,
         wake_error: BaseException | None = None,
         wakes_allowed: int = 1,
+        knowledge=None,
+        read_log: bool = True,
+        write_log: bool = True,
     ) -> None:
         self.shutting_down = threading.Event()
         self.microphone = FakeMicrophone()
@@ -185,6 +204,9 @@ class ConversationHarness:
             self.microphone,
             self.status,
             self.shutting_down,
+            knowledge=knowledge,
+            read_log=read_log,
+            write_log=write_log,
         )
         self.power_commands = PowerCommandHandler(self.voice, self.listener, self.power)
         self.orchestrator = ConversationOrchestrator(
